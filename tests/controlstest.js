@@ -15,7 +15,7 @@ const { chromium } = require('playwright');
   const nav = o => p.evaluate(o => window.__climber.nav(o), o);
   const Bt = (i, v) => p.evaluate(([i, v]) => { window.__pads[0].buttons[i] = { pressed: v, value: v ? 1 : 0 }; }, [i, v]);
   const tap = async i => { await Bt(i, true); await p.waitForTimeout(150); await Bt(i, false); await p.waitForTimeout(250); };
-  const act = () => p.evaluate(() => { const c = JSON.parse(localStorage.getItem('climber.pad.v2') || '{}'); const k = Object.keys(c)[0]; return k ? c[k].act : null; });
+  const act = () => p.evaluate(() => { const c = JSON.parse(localStorage.getItem('climberwide.pad.v2') || '{}'); const k = Object.keys(c)[0]; return k ? c[k].act : null; });
   const tag = process.env.PAD ? 'nin-' : '';
   const shot = async n => { await p.waitForTimeout(150); await p.screenshot({ path: __dirname + '/ctl-' + tag + n + '.png' }); };
   let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fails++; };

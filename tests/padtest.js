@@ -21,7 +21,7 @@ const { chromium } = require('playwright');
   await tap(1); await tap(1); await tap(2); await tap(0); await tap(3); await tap(4); await tap(5); await tap(6); await tap(7);
   await press(A(1, -1), A(1, 0)); await press(A(1, 1), A(1, 0)); await press(A(0, -1), A(0, 0)); await press(A(0, 1), A(0, 0));
   await p.waitForTimeout(420); await p.keyboard.down('Enter'); await p.waitForTimeout(140); await p.keyboard.up('Enter'); await p.waitForTimeout(400);
-  let cfg = await p.evaluate(() => JSON.parse(localStorage.getItem('climber.pad.v2')));
+  let cfg = await p.evaluate(() => JSON.parse(localStorage.getItem('climberwide.pad.v2')));
   const c = cfg && cfg['8BitDo Pro 2 (test)'];
   console.log('layout learned:', c ? Object.keys(c.layout).length + ' buttons, bottom=' + JSON.stringify(c.layout.fb) + ' start=' + JSON.stringify(c.layout.start) : 'NONE');
   console.log('default jobs:', c && JSON.stringify(c.act));
@@ -33,10 +33,10 @@ const { chromium } = require('playwright');
   // CHANGE DASH (row 1) -> press the top button
   await press(A(1, 1), A(1, 0), 250); await tap(1, 250); await p.waitForTimeout(300); await p.screenshot({ path: __dirname + '/pad-3-listen.png' });
   await tap(3, 300); await p.waitForTimeout(500);
-  cfg = await p.evaluate(() => JSON.parse(localStorage.getItem('climber.pad.v2'))['8BitDo Pro 2 (test)'].act); console.log('top button now:', cfg.ft);
+  cfg = await p.evaluate(() => JSON.parse(localStorage.getItem('climberwide.pad.v2'))['8BitDo Pro 2 (test)'].act); console.log('top button now:', cfg.ft);
   // CHANGE DASH again -> press the only jump button: must be refused
   await tap(1, 300); await tap(1, 400); await p.waitForTimeout(500);
-  cfg = await p.evaluate(() => JSON.parse(localStorage.getItem('climber.pad.v2'))['8BitDo Pro 2 (test)'].act); console.log('bottom button still:', cfg.fb);
+  cfg = await p.evaluate(() => JSON.parse(localStorage.getItem('climberwide.pad.v2'))['8BitDo Pro 2 (test)'].act); console.log('bottom button still:', cfg.fb);
   // play: Start as a key leaves a level; dash on the top button costs stamina
   await p.evaluate(() => window.__climber.startLevel(0, 0)); await p.waitForTimeout(900);
   await p.evaluate(B(1, true)); await p.waitForTimeout(120); const st = await p.evaluate(() => window.__climber.state()); await p.evaluate(B(1, false));

@@ -11,7 +11,7 @@ const { chromium } = require('playwright');
   const ALLOWED = { gb: '140,173,40|108,148,33|48,98,48|24,52,30', bw: '24,24,24|46,46,50|92,92,100|233,234,254' };
   for (const theme of (process.env.THEME ? [process.env.THEME] : ['gb', 'bw'])) {
   await p.goto('file:///home/claude/climber-wide/index.html#unlock');
-  await p.evaluate(t => localStorage.setItem('climber.theme.v1', t), theme); await p.reload(); await p.waitForTimeout(800);
+  await p.evaluate(t => localStorage.setItem('climberwide.theme.v1', t), theme); await p.reload(); await p.waitForTimeout(800);
   const greens = ALLOWED[theme];
   const counts = await p.evaluate(() => window.__climber.view().levels.map(l => l.length));
   for (let w = 0; w < counts.length; w++) for (let i = 0; i < counts[w]; i++) {

@@ -11,7 +11,7 @@ const mock = require('./mock.js');
   const status = async () => (await p.locator('#status').innerText());
   const slots = async () => p.evaluate(() => [...document.querySelectorAll('#slots button')].map(b => (b.className === 'live' ? '*' : '') + b.querySelector('b').textContent + ':' + b.querySelector('span').textContent).join(' | '));
   const gameWorld = async (w) => { const g = await ctx.newPage(); await g.goto('file:///home/claude/climber-wide/index.html'); await g.waitForTimeout(800); const r = await g.evaluate((w) => window.__climber.view().levels[w], w); await g.close(); return r.join(', '); };
-  const beat = async () => { await p.click('#play'); await p.waitForTimeout(1200); const fr = p.frames().find(f => f.url().endsWith('/climber/index.html'));
+  const beat = async () => { await p.click('#play'); await p.waitForTimeout(1200); const fr = p.frames().find(f => f.url().endsWith('/climber-wide/index.html'));
     await fr.evaluate(() => { window.__climber.manual(true); window.__climber.demoRun(3000); window.__climber.manual(false); }); await p.waitForTimeout(300); await p.click('#play'); };
   await p.goto('file:///home/claude/climber-wide/builder/index.html'); await p.waitForTimeout(500);
   mock.db.admins.push('u1'); await p.fill('#p-email', 'dan@example.com'); await p.fill('#p-pass', 'pw'); await p.click('#p-in'); await p.waitForTimeout(500);

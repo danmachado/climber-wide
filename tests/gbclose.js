@@ -6,7 +6,7 @@ const theme = process.env.THEME || 'gb', OUT = '/home/claude/shots';
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.goto('file:///home/claude/climber-wide/index.html#unlock');
-  await p.evaluate(t => localStorage.setItem('climber.theme.v1', t), theme);
+  await p.evaluate(t => localStorage.setItem('climberwide.theme.v1', t), theme);
   await p.reload(); await p.waitForTimeout(800);
   const I = o => Object.assign({ x: 0, y: 0, jump: false, dash: false, grab: false }, o);
   const go = async (w, i, seq, name) => {

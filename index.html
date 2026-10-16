@@ -985,7 +985,7 @@
   // There is no see-through on a Game Boy: while playing, an alpha under one half draws nothing and anything over draws
   // solid, and the painted glows are left out. Pins give gameplay signals a fixed shade (dash ready is the darkest, spent
   // is light) so they read without colour.
-  var THEME_KEY = 'climber.theme.v1', GB = { on: false, live: true, cache: {}, pins: { obj: {}, ui: {} } };
+  var THEME_KEY = 'climberwide.theme.v1', GB = { on: false, live: true, cache: {}, pins: { obj: {}, ui: {} } };
   try { GB.kind = localStorage.getItem(THEME_KEY); } catch (e) {}
   if (GB.kind === 'gb' || GB.kind === 'bw') GB.on = true; else GB.kind = '';
   var GB_PALS = { gb: [[140, 173, 40], [108, 148, 33], [48, 98, 48], [24, 52, 30]],   // lightest, light, dark, darkest
@@ -1090,16 +1090,19 @@
 
   // ---- level loading: rooms are data, never hard-coded ----
   // ---- where published rooms live (this key is the public, read-only kind and is safe to ship) ----
+  // The wide game keeps its own tables (`rooms_wide`, `room_versions_wide`) so the frame's portrait rooms and these
+  // landscape rooms never load into the wrong game. Same project, same key, different tables.
   var BACKEND = window.CLIMBER_BACKEND || {
     url: 'https://idgdoglrbegjorqekadr.supabase.co',
     key: 'sb_publishable_5CPsQIpba-pLQFGgiQzdQw_PiJOsvuR'
   };
+  var TB = { rooms: BACKEND.rooms || 'rooms_wide', versions: BACKEND.versions || 'room_versions_wide' };
 
-  var LIVE_KEY = 'climber.live.v1';
+  var LIVE_KEY = 'climberwide.live.v1';
   var starters = JSON.parse(document.getElementById('starter-rooms').textContent); // built-in set, also the offline fallback
   var pool = starters, queue = [];
   // Worlds and levels. Built-in rooms fill every slot; a published level with the same world and number takes that slot over.
-  var PROG_KEY = 'climber.progress.v1', prog = {}, levels = [], liveRooms = [], dataVer = 0, unlockAll = location.hash === '#unlock';
+  var PROG_KEY = 'climberwide.progress.v1', prog = {}, levels = [], liveRooms = [], dataVer = 0, unlockAll = location.hash === '#unlock';
   try { prog = JSON.parse(localStorage.getItem(PROG_KEY)) || {}; } catch (e) {}
   function rebuildLevels() {
     levels = WORLDS.map(function (wd, w) {
@@ -1168,13 +1171,13 @@
   function fetchLive() {
     if (!window.fetch) return;
     var head = { headers: { apikey: BACKEND.key } }, rows;
-    fetch(BACKEND.url + '/rest/v1/rooms?select=id,name,difficulty,published_version_id&published_version_id=not.is.null', head)
+    fetch(BACKEND.url + '/rest/v1/' + TB.rooms + '?select=id,name,difficulty,published_version_id&published_version_id=not.is.null', head)
       .then(function (r) { if (!r.ok) throw new Error('rooms ' + r.status); return r.json(); })
       .then(function (list) {
         rows = list;
         if (!rows.length) return [];
         var ids = rows.map(function (x) { return x.published_version_id; }).join(',');
-        return fetch(BACKEND.url + '/rest/v1/room_versions?select=id,data&id=in.(' + ids + ')', head)
+        return fetch(BACKEND.url + '/rest/v1/' + TB.versions + '?select=id,data&id=in.(' + ids + ')', head)
           .then(function (r) { if (!r.ok) throw new Error('versions ' + r.status); return r.json(); });
       })
       .then(function (vers) {
@@ -1954,7 +1957,7 @@
   }
   // Controller settings, remembered per controller. layout says which raw input is which physical button (only needed
   // when the browser does not recognise the pad); act says what each button does.
-  var PAD_KEY = 'climber.pad.v2', padCfg = {}, padInfo = '', padVer = 0;
+  var PAD_KEY = 'climberwide.pad.v2', padCfg = {}, padInfo = '', padVer = 0;
   try { padCfg = JSON.parse(localStorage.getItem(PAD_KEY)) || {}; } catch (e) { padCfg = {}; }
   function savePads() { padVer++; try { localStorage.setItem(PAD_KEY, JSON.stringify(padCfg)); } catch (e) {} }
   var STD = { fb: 0, fr: 1, fl: 2, ft: 3, l1: 4, r1: 5, l2: 6, r2: 7, select: 8, start: 9, up: 12, down: 13, left: 14, right: 15 };
@@ -2197,8 +2200,8 @@
   // chunk layer and its dirty tracking are untouched. Off by default until it is measured on the frame; Settings
   // turns it on, and when it is off the layer is hidden and nothing runs.
   var wx = makeCanvas(LW, LH, true), wg = wx.getContext('2d'); wx.id = 'fx';
-  var FX_KEY = 'climber.fx.v1', weather = { on: false, list: [], kind: '' };
-  var SHAKE_KEY = 'climber.shake.v1', shakeOn = true;      // screen shake moves the stage with a transform; off means the stage never moves
+  var FX_KEY = 'climberwide.fx.v1', weather = { on: false, list: [], kind: '' };
+  var SHAKE_KEY = 'climberwide.shake.v1', shakeOn = true;      // screen shake moves the stage with a transform; off means the stage never moves
   try { weather.on = localStorage.getItem(FX_KEY) === '1'; shakeOn = localStorage.getItem(SHAKE_KEY) !== '0'; } catch (e) {}
   if (GB.on) { weather.on = false; shakeOn = false; }       // GAME BOY is the fast mode for the frame: no particles, no shake (CLAUDE.md, Themes)
   function setShake(on) { shakeOn = on; try { localStorage.setItem(SHAKE_KEY, on ? '1' : '0'); } catch (e) {} }
@@ -2368,7 +2371,7 @@
   //   - the overhead cables bob in the wind (up to 2 px at the middle, a step every second or so), bulbs and all
   // Nothing strobes: the fastest change is the airship's nav light, once a second. Settings, CITY LIFE turns it off
   // (climber.city.v1); off, the city is exactly the still picture it was.
-  var CITY_KEY = 'climber.city.v1', cityOn = true, city = null;
+  var CITY_KEY = 'climberwide.city.v1', cityOn = true, city = null;
   var ct = 0, cityT = 0;   // the city's own clock, in 60ths of a second of real time: on a slow screen it still keeps its pace
   try { cityOn = localStorage.getItem(CITY_KEY) !== '0'; } catch (e) {}
   if (GB.on) cityOn = false;

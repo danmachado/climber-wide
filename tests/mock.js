@@ -18,7 +18,7 @@ module.exports = { db, start(port) {
       }
       const eq = (k) => (q.get(k) || '').startsWith('eq.') ? q.get(k).slice(3) : null;
       if (u.pathname === '/rest/v1/admins') return send(200, admin ? [{ user_id: 'u1' }] : []);
-      if (u.pathname === '/rest/v1/rooms') {
+      if ((u.pathname === '/rest/v1/rooms' || u.pathname === '/rest/v1/rooms_wide')) {
         if (req.method === 'GET') {
           let rows = db.rooms.filter((r) => admin || r.published_version_id);
           if (q.get('published_version_id') === 'not.is.null') rows = rows.filter((r) => r.published_version_id);
@@ -29,7 +29,7 @@ module.exports = { db, start(port) {
         const r = db.rooms.find((x) => x.id === eq('id')); if (!r) return send(200, []);
         Object.assign(r, j); return send(200, [r]);
       }
-      if (u.pathname === '/rest/v1/room_versions') {
+      if ((u.pathname === '/rest/v1/room_versions' || u.pathname === '/rest/v1/room_versions_wide')) {
         if (req.method === 'GET') {
           let rows = db.versions.filter((v) => admin || db.rooms.some((r) => r.published_version_id === v.id));
           if (eq('room_id')) rows = rows.filter((v) => v.room_id === eq('room_id'));

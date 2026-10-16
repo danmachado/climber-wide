@@ -224,7 +224,7 @@
 <script>
 (function () {
   'use strict';
-  var COLS = 27, ROWS = 48, T = 10, DRAFT_KEY = 'climber.builder.draft.v1';
+  var COLS = 27, ROWS = 48, T = 10, DRAFT_KEY = 'climberwide.builder.draft.v1';
   var C = { bg: '#0a0d1c', spike: '#e9edf7',
             body: '#ffe9b8', eye: '#0a0d1c', flame: '#ffb74a', teal: '#5fd6b3', tealDim: '#2b6f66' };
   var GROUPS = [
@@ -673,7 +673,7 @@
   window.addEventListener('resize', fit);
 
   // ---- view: zoom and collapsible side panels (remembered on this computer) ----
-  var VIEW_KEY = 'climber.builder.view.v1';
+  var VIEW_KEY = 'climberwide.builder.view.v1';
   function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ mode: zoomMode, zoom: userZoom, rail: $('rail').classList.contains('collapsed'), paint: $('paint').classList.contains('collapsed'), w: railW })); } catch (e) {} }
   function setZoom(mode, z) {
     zoomMode = mode;
@@ -725,7 +725,7 @@
   } catch (e) {} }
 
   // ---- publishing: drafts stay private, Publish makes a room live, and any saved version can be made live again ----
-  var SKEY = 'climber.builder.session.v1', DBKEY = 'climber.builder.room.v1';
+  var SKEY = 'climberwide.builder.session.v1', DBKEY = 'climberwide.builder.room.v1';
   var session = null, dbId = null, myRooms = [], myVers = [];
   var MAP_NAME = '(map order)';                   // the one saved record that is not a room: the order of levels on the map
   try { session = JSON.parse(localStorage.getItem(SKEY)); dbId = localStorage.getItem(DBKEY) || null; } catch (e) {}
@@ -780,7 +780,7 @@
     if (!el.value && items.length) el.value = items[0].id;
   }
   function listRooms() {
-    return api('rooms?select=id,name,difficulty,published_version_id,updated_at&order=updated_at.desc').then(function (rows) {
+    return api(TB.rooms + '?select=id,name,difficulty,published_version_id,updated_at&order=updated_at.desc').then(function (rows) {
       myRooms = (rows || []).filter(function (r) { return r.name !== MAP_NAME; });
       fillSelect($('p-rooms'), myRooms, function (r) { return r.name + (r.published_version_id ? '  (live)' : '  (draft)'); }, dbId || $('p-rooms').value);
       return listVers();
@@ -790,7 +790,7 @@
   function listVers() {
     var r = pickedRoom();
     if (!r) { myVers = []; fillSelect($('p-vers'), [], null); return Promise.resolve(); }
-    return api('room_versions?select=id,created_at,validated&room_id=eq.' + r.id + '&order=created_at.desc').then(function (rows) {
+    return api(TB.versions + '?select=id,created_at,validated&room_id=eq.' + r.id + '&order=created_at.desc').then(function (rows) {
       myVers = rows || [];
       fillSelect($('p-vers'), myVers, function (v) {
         return new Date(v.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) +
@@ -800,11 +800,11 @@
   }
   function saveVersion(validated) {
     var data = toJSON(), row = { name: room.name || 'Untitled', difficulty: room.difficulty };
-    var makeRoom = function () { return api('rooms', { method: 'POST', body: row }).then(function (rows) { setDb(rows[0].id); }); };
-    var first = !dbId ? makeRoom() : api('rooms?id=eq.' + dbId, { method: 'PATCH', body: { name: row.name, difficulty: row.difficulty, updated_at: new Date().toISOString() } })
+    var makeRoom = function () { return api(TB.rooms, { method: 'POST', body: row }).then(function (rows) { setDb(rows[0].id); }); };
+    var first = !dbId ? makeRoom() : api(TB.rooms + '?id=eq.' + dbId, { method: 'PATCH', body: { name: row.name, difficulty: row.difficulty, updated_at: new Date().toISOString() } })
       .then(function (rows) { if (!rows || !rows.length) return makeRoom(); });
     return first.then(function () {
-      return api('room_versions', { method: 'POST', body: { room_id: dbId, format_version: 1, data: data, validated: !!validated } });
+      return api(TB.versions, { method: 'POST', body: { room_id: dbId, format_version: 1, data: data, validated: !!validated } });
     }).then(function (rows) { return rows[0].id; });
   }
   $('p-in').addEventListener('click', function () {
@@ -821,21 +821,21 @@
     if (runChecks().some(function (k) { return !k.ok; })) { say('Not published. Every check must pass, including beating the room in play test.'); return; }
     if (!(room.level > 0)) { room.level = maxSlot(room.world || 1) + 1; syncMeta(); }      // a level with no slot yet goes on the end of its world
     var w = room.world || 1, lv = room.level || 0, old = lv ? liveAt(w, lv) : null, note = '';
-    saveVersion(true).then(function (vid) { return api('rooms?id=eq.' + dbId, { method: 'PATCH', body: { published_version_id: vid } }); })
+    saveVersion(true).then(function (vid) { return api(TB.rooms + '?id=eq.' + dbId, { method: 'PATCH', body: { published_version_id: vid } }); })
       .then(function () {                           // one level per slot: whatever was published there before steps aside
-        if (old && old.id !== dbId) { note = ' It replaced "' + old.name + '" in that slot.'; return api('rooms?id=eq.' + old.id, { method: 'PATCH', body: { published_version_id: null } }); }
+        if (old && old.id !== dbId) { note = ' It replaced "' + old.name + '" in that slot.'; return api(TB.rooms + '?id=eq.' + old.id, { method: 'PATCH', body: { published_version_id: null } }); }
       })
       .then(function () { dirty = false; say('Published as ' + label(w, lv) + '.' + note + ' The game picks it up the next time it starts.'); return listRooms(); })
       .then(loadLive).catch(fail);
   });
   $('p-unpub').addEventListener('click', function () {
     var r = pickedRoom(); if (!r) return;
-    api('rooms?id=eq.' + r.id, { method: 'PATCH', body: { published_version_id: null } })
+    api(TB.rooms + '?id=eq.' + r.id, { method: 'PATCH', body: { published_version_id: null } })
       .then(function () { say('Unpublished "' + r.name + '". It is a draft again.'); return listRooms(); }).then(loadLive).catch(fail);
   });
   $('p-open').addEventListener('click', function () {
     var r = pickedRoom(), vid = $('p-vers').value; if (!r || !vid) return;
-    api('room_versions?select=data&id=eq.' + vid).then(function (rows) {
+    api(TB.versions + '?select=data&id=eq.' + vid).then(function (rows) {
       var d = rows[0].data; d.name = r.name; d.difficulty = r.difficulty;
       var before = snapshot(); load(d, 'Opened "' + r.name + '".'); undoStack = [before]; setDb(r.id); refresh();
     }).catch(fail);
@@ -844,7 +844,7 @@
     var r = pickedRoom(), vid = $('p-vers').value, v = myVers.filter(function (x) { return x.id === vid; })[0];
     if (!r || !v) return;
     if (!v.validated) { say('That version was never beaten in play test, so it cannot go live.'); return; }
-    api('rooms?id=eq.' + r.id, { method: 'PATCH', body: { published_version_id: vid } })
+    api(TB.rooms + '?id=eq.' + r.id, { method: 'PATCH', body: { published_version_id: vid } })
       .then(function () { say('That version of "' + r.name + '" is now live.'); return listRooms(); }).then(loadLive).catch(fail);
   });
   showPub();
@@ -881,9 +881,9 @@
   function saveOrder() {
     if (!session) { say('Sign in under Publish to save the map order.'); return; }
     var body = { format: 0, kind: 'map', order: mapOrder };
-    var first = mapDocId ? Promise.resolve() : api('rooms', { method: 'POST', body: { name: MAP_NAME, difficulty: 1 } }).then(function (rows) { mapDocId = rows[0].id; });
-    first.then(function () { return api('room_versions', { method: 'POST', body: { room_id: mapDocId, format_version: 1, data: body, validated: true } }); })
-      .then(function (rows) { return api('rooms?id=eq.' + mapDocId, { method: 'PATCH', body: { published_version_id: rows[0].id, updated_at: new Date().toISOString() } }); })
+    var first = mapDocId ? Promise.resolve() : api(TB.rooms, { method: 'POST', body: { name: MAP_NAME, difficulty: 1 } }).then(function (rows) { mapDocId = rows[0].id; });
+    first.then(function () { return api(TB.versions, { method: 'POST', body: { room_id: mapDocId, format_version: 1, data: body, validated: true } }); })
+      .then(function (rows) { return api(TB.rooms + '?id=eq.' + mapDocId, { method: 'PATCH', body: { published_version_id: rows[0].id, updated_at: new Date().toISOString() } }); })
       .then(function () { orderDirty = false; say('Map order saved. The game picks it up the next time it starts.'); return loadLive(); }).catch(fail);
   }
   $('mv-back').addEventListener('click', function () { moveSlot(-1); });
@@ -894,12 +894,12 @@
   // Published levels are public, so the map can be read without signing in.
   function loadLive() {
     var head = { headers: { apikey: BACKEND.key } }, rows;
-    return fetch(BACKEND.url + '/rest/v1/rooms?select=id,name,difficulty,published_version_id&published_version_id=not.is.null', head)
+    return fetch(BACKEND.url + '/rest/v1/' + TB.rooms + '?select=id,name,difficulty,published_version_id&published_version_id=not.is.null', head)
       .then(function (r) { if (!r.ok) throw new Error('rooms'); return r.json(); })
       .then(function (list) {
         rows = list;
         if (!rows.length) return [];
-        return fetch(BACKEND.url + '/rest/v1/room_versions?select=id,data&id=in.(' + rows.map(function (x) { return x.published_version_id; }).join(',') + ')', head).then(function (r) { if (!r.ok) throw new Error('versions'); return r.json(); });
+        return fetch(BACKEND.url + '/rest/v1/' + TB.versions + '?select=id,data&id=in.(' + rows.map(function (x) { return x.published_version_id; }).join(',') + ')', head).then(function (r) { if (!r.ok) throw new Error('versions'); return r.json(); });
       })
       .then(function (vers) {
         var byId = {};
