@@ -2715,28 +2715,123 @@
       px(cx3, cy3, top ? (cy3 < 3 ? '#fff6c0' : LOGO_BANDS[Math.max(0, cy3 - 2)]) : LOGO_BANDS[cy3]);
     }
   }
+  // The main menu is a little level (Oct 2026): the painted scene of the world last picked on the map, a floor, the
+  // title spelled out in that world's own terrain tiles (lit edges, chips, snow caps, moss, drips, all from drawSolid),
+  // MAP and ENDLESS as terrain slabs with a recessed plate, the small buttons as terrain blocks, and what the chosen one
+  // does on a sign of backdrop brick. The art is built once per world and theme into a 480 x 270 canvas (menuArt) and
+  // laid under the labels; a redraw on a change is one scaled copy plus the labels, so the menu still costs nothing at rest.
+  // The title: the arcade capitals of LOGO, built out of the world's terrain at 6 px a cell. Each pixel is shaded the way
+  // drawSolid shades a wall (a lit top, side faces, a dark underside, a band of face colour, the deep interior with a
+  // crack here and there), then the world's edge art goes on: snow caps and icicles, moss, vines, the neon kerb, drips.
+  function drawTerrainWord(b, word, cx, y, sc, S) {
+    var cells = {}, x = 0, i, r, c, W, H = 9 * sc;
+    for (i = 0; i < word.length; i++) { var g = LOGO[word.charAt(i)]; for (r = 0; r < g.length; r++) for (c = 0; c < g[r].length; c++) if (g[r].charAt(c) === '#') cells[(x + c) + ',' + r] = 1; x += g[0].length + 2; }
+    W = (x - 2) * sc; var x0 = Math.round(cx - W / 2);
+    function on(px, py) { return px >= 0 && py >= 0 && !!cells[Math.floor(px / sc) + ',' + Math.floor(py / sc)]; }
+    function dot(px, py, col) { b.fillStyle = col; b.fillRect(x0 + px, y + py, 1, 1); }
+    var px, py;
+    for (py = 0; py < H; py++) for (px = 0; px < W; px++) {
+      if (!on(px, py)) continue;
+      var up = !on(px, py - 1), dn = !on(px, py + 1), lf = !on(px - 1, py), rt = !on(px + 1, py), d = 9;
+      for (var k = 1; k <= 3; k++) if (!on(px, py - k) || !on(px, py + k) || !on(px - k, py) || !on(px + k, py)) { d = k; break; }
+      var t = tileHash(px >> 1, py >> 1), col = d <= 2 + (t < 0.5 ? 0 : 1) ? S.face : S.deep;
+      if (col === S.deep && tileHash(px + 9, Math.floor(py / 3)) < 0.05) col = S.line;             // a crack in the deep part
+      if (col === S.deep && t > 0.93) col = S.mark;
+      if (lf || rt) col = S.side; if (dn) col = S.lo; if (up) col = S.hi;
+      if ((up && lf || up && rt) && tileHash(px, py + 41) < 0.5) continue;                     // chipped corners
+      dot(px, py, col);
+    }
+    for (px = 0; px < W; px++) for (py = 0; py < H; py++) {                                     // the world's edge art
+      if (!on(px, py)) continue;
+      var top = !on(px, py - 1), bot = !on(px, py + 1), v = tileHash(px * 3 + 7, py * 5 + 1);
+      if (top) {
+        if (S.snow) { dot(px, py, S.snow); if (on(px, py + 1)) dot(px, py + 1, S.snow); if (on(px, py + 2)) dot(px, py + 2, S.snowLo); if (v < 0.3) dot(px, py - 1, S.snow); }
+        else if (S.strip) { dot(px, py, S.strip); if (on(px, py + 1)) dot(px, py + 1, S.stripLo); }
+        else if (S.moss && v < 0.35) { dot(px, py, S.moss); if (v < 0.12) dot(px, py - 1, S.moss); }
+        else if (S.vine && v < 0.4) { dot(px, py, S.vine); if (v < 0.12) dot(px, py - 1, S.vine); }
+        else if (S.soot && v < 0.4) dot(px, py, S.soot);
+      }
+      if (bot) {
+        var L = 0;
+        if (S.icicle && v < 0.22) { L = 2 + Math.floor(v * 20); for (k = 1; k <= L; k++) dot(px, py + k, k === 1 ? S.snow : S.icicle); }
+        else if (S.drip && v < 0.12) { L = 1 + Math.floor(v * 25); for (k = 1; k <= L; k++) dot(px, py + k, k === L ? S.dripHi : S.drip); }
+        else if (S.vine && v < 0.1) { L = 3 + Math.floor(v * 60); for (k = 1; k <= L; k++) dot(px + (k % 4 === 2 ? 1 : 0), py + k, k % 3 ? S.vineLo : S.vine); }
+        else if (S.moss && v < 0.06) { L = 2 + Math.floor(v * 60); for (k = 1; k <= L; k++) dot(px, py + k, S.moss); }
+        else if (S.strip && v < 0.05) { dot(px, py + 1, S.stripLo); dot(px, py + 2, S.strip); }
+      }
+    }
+    return { x: x0, y: y, w: W, h: H };
+  }
+  var MLAY = { slabRow: 9, slabH: 4, slabW: 18, slabCols: [4, 26], blockRow: 14, block: 4, blockCols: [16, 22, 28], signRow: 19, signRows: 3, signCols: [8, 39], floorRow: 24 };
+  var menuArt = { key: '', cv: null };
+  function menuWorld() { return Math.max(0, Math.min(WORLDS.length - 1, sel.w | 0)); }
+  function menuGrid() {                              // the menu as a room grid: '#' terrain, 'b' backdrop, '.' open
+    var cols = SCREEN.cols, rows = SCREEN.rows, g = [], r, c, i;
+    for (r = 0; r < rows; r++) { g.push([]); for (c = 0; c < cols; c++) g[r].push(r >= MLAY.floorRow ? '#' : '.'); }
+    MLAY.slabCols.forEach(function (c0) { for (r = 0; r < MLAY.slabH; r++) for (c = 0; c < MLAY.slabW; c++) g[MLAY.slabRow + r][c0 + c] = '#'; });
+    MLAY.blockCols.forEach(function (c0) { for (r = 0; r < MLAY.block; r++) for (c = 0; c < MLAY.block; c++) g[MLAY.blockRow + r][c0 + c] = '#'; });
+    for (r = 0; r < MLAY.signRows; r++) for (c = MLAY.signCols[0]; c <= MLAY.signCols[1]; c++) g[MLAY.signRow + r][c] = 'b';
+    return g;
+  }
+  function buildMenuArt() {
+    var w = menuWorld(), key = w + '|' + GB.kind + '|' + GB.on;
+    if (menuArt.key === key && menuArt.cv) return menuArt.cv;
+    var th = THEMES[WORLDS[w].theme] || THEMES.brick, oldTheme = TILE_THEME, live = GB.live, g = menuGrid(), cols = SCREEN.cols, rows = SCREEN.rows, r, c, T = SCREEN.tile;
+    setTileTheme(th); GB.live = false;
+    var cv = document.createElement('canvas'); cv.width = LW; cv.height = LH; var b = cv.getContext('2d');
+    var at = function (cc, rr) { return rr < 0 || rr >= rows || cc < 0 || cc >= cols ? '#' : g[rr][cc]; };
+    var wallAt = function (cc, rr) { return at(cc, rr) === '#'; }, backAt = function (cc, rr) { return at(cc, rr) !== '.'; };
+    drawSky(b, LW, LH, LH, skyHash('menu/' + w), null, null);
+    gbSnap([cv], 'back');
+    var wl = document.createElement('canvas'); wl.width = LW; wl.height = LH; var wb = wl.getContext('2d');
+    for (r = 0; r < rows; r++) for (c = 0; c < cols; c++) if (g[r][c] === '#') drawSolid(wb, c * T, r * T, 'brick', wallAt, c, r);
+    drawTerrainWord(wb, 'CLIMBER', LW / 2, 12, 6, TILESETS[th.tiles] || TILESETS.brick);
+    gbSnap([wl], 'wall');
+    if (!GB.on) { b.save(); b.globalAlpha = 0.55; b.filter = 'brightness(0)'; b.drawImage(wl, 3, 3); b.restore(); }   // a cast shadow, so the terrain lifts off the busy scene
+    b.drawImage(wl, 0, 0);
+    var lamps = gbStage(b, 'deco', function (d) { return drawDecals(d, cols, rows, function (cc, rr) { var ch = at(cc, rr); return ch === 'b' ? '.' : ch; }, skyHash('menu/' + w)); });
+    gbStage(b, 'back', function (d) { for (r = 0; r < rows; r++) for (c = 0; c < cols; c++) if (g[r][c] === 'b') drawBack(d, c * T, r * T, backAt, c, r); });   // the sign board goes on last, clear of decals
+    for (var i = 0; i < lamps.length; i++) drawGlow(b, lamps[i].x, lamps[i].y, 20, DECAL_GLOW[th.tiles] || DECAL_GLOW.brick, 0.26);
+    setTileTheme(oldTheme); GB.live = live;
+    menuArt = { key: key, cv: cv };
+    return cv;
+  }
+  function hexRgb(c) { var n = parseInt(c.slice(1), 16); return (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255); }
   function drawMenu(u, box) {
-    var INK = '#101426', i, k;
-    drawLogo(box, MX, 14, 4);                                        // 7 rows x 4 = 36 tall, ends at 50
-    for (i = 0; i < MENU_BIG; i++) {                                 // MAP and ENDLESS side by side
-      var on = i === sel.menu, x = MX - 205 + i * 210, y = 72;
-      keyButton(box, x, y, 200, 42, on);
-      pxText(MENU[i][0], x + 100, y + 10, 3, on ? INK : C.dim, 'center');
-      hits.push({ x: x, y: y, w: 200, h: 42, fn: (function (kk) { return function () { sel.menu = kk; MENU[kk][2](); }; })(i) });
+    var w = menuWorld(), th = THEMES[WORLDS[w].theme] || THEMES.brick, S = TILESETS[th.tiles] || TILESETS.brick, T = SCREEN.tile, i, k;
+    var art = buildMenuArt();
+    h.imageSmoothingEnabled = false; h.drawImage(art, 0, 0, Math.round(LW * u), Math.round(LH * u));
+    var ACC = th.accent, DIM = '#9aa3c8', PLATE = '#05070e';
+    function glow(cx, cy, rad, a) { if (GB.on) return; h.save(); h.scale(u, u); drawGlow(h, cx, cy, rad, hexRgb(ACC), a); h.restore(); }
+    function plate(x, y, ww, hh) { box(x, y, ww, hh, PLATE); box(x + 1, y + 1, ww - 2, hh - 2, S.core); box(x + 1, y + 1, ww - 2, 1, PLATE); box(x + 1, y + hh - 2, ww - 2, 1, S.lo); box(x, y + hh - 1, ww, 1, S.side); }   // recessed: shadow on top, a lit lip below
+    function frame(x, y, ww, hh) { box(x - 3, y - 3, ww + 6, 2, ACC); box(x - 3, y + hh + 1, ww + 6, 2, ACC); box(x - 3, y - 1, 2, hh + 2, ACC); box(x + ww + 1, y - 1, 2, hh + 2, ACC); }
+    function chev(x, y, dir) { for (var q = 0; q < 5; q++) box(x + (dir > 0 ? q : -q), y + q, 1, 11 - 2 * q, ACC); }
+    var hit = function (kk) { return function () { sel.menu = kk; MENU[kk][2](); }; };
+    for (i = 0; i < MENU_BIG; i++) {                                 // MAP and ENDLESS: terrain slabs
+      var on = i === sel.menu, x = MLAY.slabCols[i] * T, y = MLAY.slabRow * T, sw = MLAY.slabW * T, sh = MLAY.slabH * T;
+      if (on) { glow(x + sw / 2, y + sh / 2, sw * 0.6, 0.3); frame(x, y, sw, sh); }
+      plate(x + 10, y + 7, sw - 20, sh - 13);
+      if (on) { chev(x + 22, y + 15, 1); chev(x + sw - 22, y + 15, -1); }
+      pxText(MENU[i][0], x + sw / 2 + 1, y + 11, 3, PLATE, 'center');
+      pxText(MENU[i][0], x + sw / 2, y + 10, 3, on ? ACC : DIM, 'center');
+      hits.push({ x: x, y: y, w: sw, h: sh, fn: hit(i) });
     }
-    var n = MENU.length - MENU_BIG;
-    for (i = 0; i < n; i++) {                                        // the small icon buttons in a row under them
-      var mi = MENU_BIG + i, on2 = mi === sel.menu, cx = MX + (i - (n - 1) / 2) * 50, x0 = cx - 20, y0 = 130, ic = MENU_ICONS[MENU[mi][0]];
-      keyButton(box, x0, y0, 40, 40, on2);
-      if (ic) { var iw = ic[0].length, ih = ic.length, ix = cx - iw, iy = y0 + 19 - ih;   // centred, nudged up a pixel for the shaded bottom band
-        for (var r = 0; r < ih; r++) for (k = 0; k < iw; k++) if (ic[r].charAt(k) === '#') box(ix + k * 2, iy + r * 2, 2, 2, on2 ? INK : C.dim); }
-      hits.push({ x: x0, y: y0, w: 40, h: 40, fn: (function (kk) { return function () { sel.menu = kk; MENU[kk][2](); }; })(mi) });
+    for (i = MENU_BIG; i < MENU.length; i++) {                       // the small buttons: terrain blocks with an icon plate
+      var on2 = i === sel.menu, bx = MLAY.blockCols[i - MENU_BIG] * T, by = MLAY.blockRow * T, bs = MLAY.block * T, ic = MENU_ICONS[MENU[i][0]];
+      if (on2) { glow(bx + bs / 2, by + bs / 2, bs, 0.3); frame(bx, by, bs, bs); }
+      plate(bx + 5, by + 5, bs - 10, bs - 9);
+      if (ic) { var iw = ic[0].length, ih = ic.length, ix = bx + bs / 2 - iw, iy = by + bs / 2 - ih;
+        for (var r = 0; r < ih; r++) for (k = 0; k < iw; k++) if (ic[r].charAt(k) === '#') box(ix + k * 2, iy + r * 2, 2, 2, on2 ? ACC : DIM); }
+      hits.push({ x: bx, y: by, w: bs, h: bs, fn: hit(i) });
     }
-    // what the chosen button does; a note from reload or exit takes its place
-    var lines = wrapText(hudClean(menuNote || MENU[sel.menu][1]), 44), ly = 190;
-    if (!menuNote && sel.menu >= MENU_BIG) { pxText(MENU[sel.menu][0], MX, ly, 1, C.flame, 'center'); ly += 12; }
-    for (i = 0; i < lines.length; i++) pxText(lines[i], MX, ly + i * 11, 1, menuNote ? C.flame : C.text, 'center');
-    pxText(usedPad ? 'ARROWS CHOOSE - JUMP STARTS' : 'ARROWS CHOOSE - C STARTS - OR CLICK', MX, 256, 1, '#5a6590', 'center');
+    // the sign: what the chosen button does (a note from reload or exit takes its place)
+    var sx0 = MLAY.signCols[0] * T, sx1 = (MLAY.signCols[1] + 1) * T, sy = MLAY.signRow * T, shh = MLAY.signRows * T;
+    box(sx0 + 3, sy + 3, sx1 - sx0 - 6, shh - 6, 'rgba(5,7,14,0.55)');
+    var lines = wrapText(hudClean(menuNote || MENU[sel.menu][1]), 44), ly = sy + 7;
+    if (!menuNote && sel.menu >= MENU_BIG) { pxText(MENU[sel.menu][0], MX, ly, 1, ACC, 'center'); ly += 10; }
+    else if (lines.length < 2) ly += 5;
+    for (i = 0; i < lines.length && i < 2; i++) pxText(lines[i], MX, ly + i * 10, 1, menuNote ? ACC : C.text, 'center');
+    pxText(usedPad ? 'ARROWS CHOOSE - JUMP STARTS' : 'ARROWS CHOOSE - C STARTS - OR CLICK', MX, MLAY.floorRow * T + (GB.on ? -12 : 16), 1, DIM, 'center');   // GAME BOY: the floor is the darkest shade, so the hint sits above it
   }
   // Reload asks the server for a fresh copy first, so a new build shows up without clearing anything by hand.
   function reloadGame() {
@@ -3055,14 +3150,6 @@
     h.clearRect(0, 0, hud.width, hud.height);
     if (scene === 'settings') drawSettings(u);
     else if (scene === 'menu') {
-      box(0, 0, LW, LH, THEMES.brick.bg);
-      for (i = 0; i < 6; i++) box(0, LH - 24 - i * 6, LW, 1, i % 2 ? '#10152e' : '#141a38');
-      // the hero, big, standing on the floor stripes at the left
-      if (hero.ready) { h.imageSmoothingEnabled = false; h.drawImage(hero.sheets[0], 0, 0, 16, 16, Math.round(22 * u), Math.round((LH - 24 - 64) * u), Math.round(64 * u), Math.round(64 * u)); }
-      else if (!HERO.enabled) {
-        box(38, LH - 64, 32, 40, C.body); box(54, LH - 52, 4, 8, C.eye); box(62, LH - 52, 4, 8, C.eye);
-        box(46, LH - 72, 16, 8, C.flame); box(50, LH - 80, 8, 8, C.flame);
-      }
       drawMenu(u, box);
     } else {
       drawMap(u, box);
