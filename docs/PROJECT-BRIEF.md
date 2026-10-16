@@ -45,3 +45,26 @@ Repo: danmachado/climber on GitHub, served by GitHub Pages from main.
   the trial rooms.
 - Next up when Dan says so: a smarter auto-player for island rooms (option A), more island hazards (drones,
   lasers on slabs), and whatever he brings.
+
+## Climber Wide (2026-10-16): the landscape version
+
+- Dan's 8BitDo switches to Apple mode, so the game plays on his laptop. The plan: keep the frame's portrait game
+  untouched, build a landscape version for laptops, TVs and iPads, ship to Steam first (web build in a desktop
+  wrapper), then consoles (Nintendo, PlayStation, Xbox) if it is good.
+- Separate repo `climber-wide` (a copy with the frame's full history; `danmachado/climber-wide` on GitHub once Dan
+  creates it, page at `danmachado.github.io/climber-wide/`). Its own `CLAUDE.md` says how it differs. One-time steps
+  for Dan in `docs/WIDE-SETUP.md`: make the empty GitHub repo, push, turn on Pages; run the SQL that copies the two
+  Supabase tables to `rooms_wide` and `room_versions_wide` with their policies.
+- Decided: option B, wide rooms (48 x 27 tiles, same 10 px tiles, tall rooms 54 rows; the frame's buffer turned on its
+  side, exactly 16:9), with a fresh level set. Option A (scrolling the old tall rooms) left dead space at the sides.
+- Done 2026-10-16: the copy; own save prefix (`climberwide.`) and own tables; `src/shared-screen.js` as the one place
+  the screen and room shape live (game, builder, auto-builder, tests all read it); every screen relaid for landscape;
+  all 45 levels generated fresh (level 1 too); auto-player 45/45, sweeps 3600/3600 floors and 3600/3600 islands;
+  parallax (sky, far and near silhouettes on layers behind the room, sliding with the camera in tall rooms plus a
+  small lead with the hero; PARALLAX switch under GRAPHICS; off in the fast mode).
+- Parked in the wide repo until redrawn for 48 x 27: the hand-made combat 1-1 and the six trial rooms (portrait).
+  Neon Row's far-row traffic and far-window blinking are off with parallax on (the far rows are a still layer).
+- Not yet seen by Dan on any screen: the wide build, parallax. Everything above is headless (Playwright) only.
+- Next for wide: Dan plays it on the laptop; level design for landscape (wide floors rooms are long corridors, islands
+  suit it better); a hand-made wide 1-1 with combat; trials redrawn; Steam prep (fullscreen with whole-number scaling,
+  pause on focus loss, keyboard remap, then an Electron or Tauri wrapper).
