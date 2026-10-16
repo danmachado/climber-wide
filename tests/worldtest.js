@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const p = await b.newPage({ viewport: { width: 1400, height: 900 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
-  await p.goto('file:///home/claude/climber/builder/index.html'); await p.waitForTimeout(400);
+  await p.goto('file:///home/claude/climber-wide/builder/index.html'); await p.waitForTimeout(400);
   const pal = () => p.evaluate(() => [...document.querySelectorAll('#palette button')].map(b => b.dataset.ch).join(''));
   const chips = () => p.evaluate(() => [...document.querySelectorAll('#g-els button')].filter(b => !b.hidden).map(b => b.dataset.v).join(' '));
   const count = (ch) => p.evaluate((ch) => JSON.parse(localStorage.getItem('climber.builder.draft.v1')).tiles.join('').split(ch).length - 1, ch);

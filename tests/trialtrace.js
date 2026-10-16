@@ -3,8 +3,8 @@
 const { chromium } = require('playwright'); const fs = require('fs');
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage(); await p.goto('file:///home/claude/climber/index.html');
-  const room = JSON.parse(fs.readFileSync('/home/claude/climber/src/trials/' + process.argv[2] + '.json', 'utf8'));
+  const p = await b.newPage(); await p.goto('file:///home/claude/climber-wide/index.html');
+  const room = JSON.parse(fs.readFileSync('/home/claude/climber-wide/src/trials/' + process.argv[2] + '.json', 'utf8'));
   const rec = JSON.parse(fs.readFileSync(process.argv[3], 'utf8')), without = process.argv[4] || '';
   const out = await p.evaluate(([room, rec, without]) => {
     const G = window.__climber; G.manual(true); G.load(room);

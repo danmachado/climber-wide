@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
   for (const theme of ['original', 'gb']) {
     const p = await b.newPage({ viewport: { width: 540, height: 960 } });
     await p.route('**/rest/v1/**', r => r.abort());
-    await p.goto('file:///home/claude/climber/index.html#unlock');
+    await p.goto('file:///home/claude/climber-wide/index.html#unlock');
     await p.evaluate(t => localStorage.setItem('climber.theme.v1', t), theme); await p.reload(); await p.waitForTimeout(800);
     for (const [w, i] of [[0, 2], [1, 3], [2, 7], [3, 6], [4, 4], [4, 8]]) {
       const load = await p.evaluate(([w, i]) => { const G = window.__climber, t0 = performance.now(); G.startLevel(w, i); return Math.round(performance.now() - t0); }, [w, i]);

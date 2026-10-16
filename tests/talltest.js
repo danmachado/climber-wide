@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
-  await p.goto('file:///home/claude/climber/index.html#unlock'); await p.waitForTimeout(300);
+  await p.goto('file:///home/claude/climber-wide/index.html#unlock'); await p.waitForTimeout(300);
   const r = await p.evaluate(() => {
     const G = window.__climber; G.manual(true);
     G.startLevel(0, 8);                                     // 1-9, The Long Way (two screens)
@@ -46,7 +46,7 @@ const { chromium } = require('playwright');
   console.log('spring: rose', 450 - sg.highest, 'px (about', Math.round((450 - sg.highest) / 10), 'tiles) | gem picked up in the air:', sg.gemFollowing, '| banked on landing:', sg.gemBanked);
   // builder: height toggle
   const p2 = await b.newPage({ viewport: { width: 1400, height: 1000 } });
-  await p2.goto('file:///home/claude/climber/builder/index.html'); await p2.waitForTimeout(300);
+  await p2.goto('file:///home/claude/climber-wide/builder/index.html'); await p2.waitForTimeout(300);
   await p2.selectOption('#rows', '96'); await p2.waitForTimeout(200);
   const bt = await p2.evaluate(() => { const t = JSON.parse(localStorage.getItem('climber.builder.draft.v1')).tiles; return [t.length, t[0], t[48], t[95]]; });
   console.log('builder 2 screens: rows', bt[0], '| top border', bt[1].slice(0, 6), '| old top now open', bt[2].slice(0, 6), '| bottom', bt[3].slice(0, 6));

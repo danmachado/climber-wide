@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
-  await p.goto('file:///home/claude/climber/index.html#unlock'); await p.waitForTimeout(700);
+  await p.goto('file:///home/claude/climber-wide/index.html#unlock'); await p.waitForTimeout(700);
   const V = () => p.evaluate(() => window.__climber.view());
   const S = () => p.evaluate(() => window.__climber.state());
   const key = async (k, wait) => { await p.keyboard.down(k); await p.waitForTimeout(90); await p.keyboard.up(k); await p.waitForTimeout(wait || 200); };

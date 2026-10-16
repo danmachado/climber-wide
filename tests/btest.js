@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const p = await b.newPage({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
-  await p.goto('file:///home/claude/climber/builder/index.html');
+  await p.goto('file:///home/claude/climber-wide/builder/index.html');
   const box = await p.locator('#grid').boundingBox();
   const cell = box.width / 27;
   const at = (c, r) => [box.x + (c + 0.5) * cell, box.y + (r + 0.5) * cell];

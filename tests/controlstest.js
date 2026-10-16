@@ -11,7 +11,7 @@ const { chromium } = require('playwright');
     navigator.getGamepads = () => window.__pads;
   });
   const id = process.env.PAD || 'Xbox Wireless Controller';
-  await p.goto('file:///home/claude/climber/index.html#' + encodeURIComponent(id)); await p.waitForTimeout(700);
+  await p.goto('file:///home/claude/climber-wide/index.html#' + encodeURIComponent(id)); await p.waitForTimeout(700);
   const nav = o => p.evaluate(o => window.__climber.nav(o), o);
   const Bt = (i, v) => p.evaluate(([i, v]) => { window.__pads[0].buttons[i] = { pressed: v, value: v ? 1 : 0 }; }, [i, v]);
   const tap = async i => { await Bt(i, true); await p.waitForTimeout(150); await Bt(i, false); await p.waitForTimeout(250); };

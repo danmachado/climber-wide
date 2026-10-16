@@ -9,7 +9,7 @@ const OUT = process.env.OUT || '/home/claude/combat', fs = require('fs');
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
   if (process.env.THEME) await p.addInitScript((t) => localStorage.setItem('climber.theme.v1', t), process.env.THEME);
-  await p.goto('file:///home/claude/climber/index.html'); await p.waitForTimeout(500);
+  await p.goto('file:///home/claude/climber-wide/index.html'); await p.waitForTimeout(500);
   await p.evaluate(() => { const G = window.__climber; G.manual(true); G.demoRun(0); });
   const ranges = (process.env.RANGES || '40-130,400-520').split(',').map(r => r.split('-').map(Number));
   const last = Math.max(...ranges.map(r => r[1]));

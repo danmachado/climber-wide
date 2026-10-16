@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
     window.__pads = [mk(0, 0, 4), mk(1, 16, 0)];
     navigator.getGamepads = () => window.__pads;
   });
-  await p.goto('file:///home/claude/climber/index.html'); await p.waitForTimeout(600);
+  await p.goto('file:///home/claude/climber-wide/index.html'); await p.waitForTimeout(600);
   const B = (i, v) => `window.__pads[1].buttons[${i}] = { pressed: ${v}, value: ${v ? 1 : 0} }`;
   const A = (i, v) => `window.__pads[0].axes[${i}] = ${v}`;
   const press = async (on, off, gap) => { await p.waitForTimeout(gap || 420); await p.evaluate(on); await p.waitForTimeout(140); await p.evaluate(off); };

@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const p = await b.newPage({ viewport: { width: 540, height: 960 }, deviceScaleFactor: 2 });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
-  await p.goto('file:///home/claude/climber/index.html');
+  await p.goto('file:///home/claude/climber-wide/index.html');
   // play the first room with the demo script's inputs but as a normal run, so the exit chains to room 2
   const r = await p.evaluate(() => {
     const G = window.__climber; G.manual(true); G.reset();

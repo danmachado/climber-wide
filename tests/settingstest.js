@@ -6,7 +6,7 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
-  await p.goto('file:///home/claude/climber/index.html'); await p.waitForTimeout(700);
+  await p.goto('file:///home/claude/climber-wide/index.html'); await p.waitForTimeout(700);
   const nav = o => p.evaluate(o => window.__climber.nav(o), o);
   const shot = async n => { await p.waitForTimeout(120); await p.screenshot({ path: __dirname + '/set-' + n + '.png' }); };
   let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fails++; };

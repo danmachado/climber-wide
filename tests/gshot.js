@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const p = await b.newPage({ viewport: { width: 1600, height: 1000 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
-  await p.goto('file:///home/claude/climber/builder/index.html');
+  await p.goto('file:///home/claude/climber-wide/builder/index.html');
   await p.click('#auto summary');
   await p.selectOption('#g-diff', '4'); await p.selectOption('#g-obs', '2');
   await p.click('#g-go'); console.log(await p.locator('#status').innerText());

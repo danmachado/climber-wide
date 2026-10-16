@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
-  await p.goto('file:///home/claude/climber/index.html'); await p.waitForTimeout(300);
+  await p.goto('file:///home/claude/climber-wide/index.html'); await p.waitForTimeout(300);
   const r = await p.evaluate(() => { const G = window.__climber; G.manual(true); return G.demoAll(); });
   const bad = Object.entries(r).filter(([k, v]) => !v.startsWith('won'));
   console.log(JSON.stringify(r)); console.log('recordings', Object.keys(r).length, 'not won', bad.length);

@@ -7,7 +7,7 @@ const theme = process.env.THEME || 'gb', OUT = '/home/claude/shots';
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
-  await p.goto('file:///home/claude/climber/index.html#unlock');
+  await p.goto('file:///home/claude/climber-wide/index.html#unlock');
   await p.evaluate(t => localStorage.setItem('climber.theme.v1', t), theme);
   await p.reload(); await p.waitForTimeout(800);
   const shot = n => p.screenshot({ path: OUT + '/' + theme + '-' + n + '.png' });

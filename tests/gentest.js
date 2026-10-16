@@ -4,10 +4,10 @@ const fs = require('fs');
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
-  await p.goto('file:///home/claude/climber/index.html');
-  await p.addScriptTag({ content: fs.readFileSync('/home/claude/climber/src/gen.js', 'utf8') + '\nwindow.generateRoom = generateRoom;' });
+  await p.goto('file:///home/claude/climber-wide/index.html');
+  await p.addScriptTag({ content: fs.readFileSync('/home/claude/climber-wide/src/gen.js', 'utf8') + '\nwindow.generateRoom = generateRoom;' });
   const N = +(process.argv[2] || 20);
-  const SP = JSON.parse(fs.readFileSync('/home/claude/climber/src/starter-plans.json', 'utf8'));
+  const SP = JSON.parse(fs.readFileSync('/home/claude/climber-wide/src/starter-plans.json', 'utf8'));
   const ONE = process.env.ONE ? JSON.parse(process.env.ONE) : null;
   if (process.env.LAYOUT) await p.evaluate((l) => { window.__layout = l; }, process.env.LAYOUT);
   const out = await p.evaluate(([N, SP, ONE]) => {
@@ -264,7 +264,7 @@ const fs = require('fs');
     return res;
   }, [N, SP, ONE]);
   // the auto-player's time on each built-in level is what par times are set from (see src/build.js)
-  if (N === 0 && !out.fail.length) { fs.writeFileSync('/home/claude/climber/src/starter-times.json', JSON.stringify(out.times, null, 1)); fs.writeFileSync('/home/claude/climber/src/starter-demos.json', JSON.stringify(out.demos)); console.log('bot times', JSON.stringify(out.times)); }
+  if (N === 0 && !out.fail.length) { fs.writeFileSync('/home/claude/climber-wide/src/starter-times.json', JSON.stringify(out.times, null, 1)); fs.writeFileSync('/home/claude/climber-wide/src/starter-demos.json', JSON.stringify(out.demos)); console.log('bot times', JSON.stringify(out.times)); }
   const kinds = {};
   out.fail.forEach(f => { const k = f[1].replace(/floor \d+ /, '').replace(/ t\d+/, ''); kinds[k] = (kinds[k] || 0) + 1; });
   console.log('rooms', out.total, 'failed', out.fail.length, JSON.stringify(kinds, null, 0).slice(0, 1500));

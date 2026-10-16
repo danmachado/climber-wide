@@ -2,7 +2,7 @@
 // Writes /home/claude/trial-shots/<id>.png. Run: NODE_PATH=/opt/npm-tools/node_modules node tests/trialshots.js
 const { chromium } = require('playwright');
 const fs = require('fs');
-const ROOT = '/home/claude/climber', OUT = '/home/claude/trial-shots';
+const ROOT = '/home/claude/climber-wide', OUT = '/home/claude/trial-shots';
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());

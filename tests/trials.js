@@ -6,7 +6,7 @@
 // ONLY=name limits it to one room. Run: NODE_PATH=/opt/npm-tools/node_modules node tests/trials.js
 const { chromium } = require('playwright');
 const fs = require('fs');
-const ROOT = '/home/claude/climber';
+const ROOT = '/home/claude/climber-wide';
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const p = await b.newPage({ viewport: { width: 540, height: 960 } });
