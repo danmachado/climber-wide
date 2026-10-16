@@ -538,7 +538,7 @@
   }
   function killFoe(f, dir, how) {
     if (f.state === 'dead') return;
-    f.state = 'dead'; combat.stop = P.hitStop * (f.big ? 2 : 1); addShake(f.big ? 3 : 1.5, f.big ? 0.25 : 0.12);
+    f.state = 'dead'; combat.stop = P.hitStop * (f.big ? 2 : 1); addShake(f.big ? 3 : 1.5, f.big ? 0.25 : 0.12); rumble(f.big ? 0.75 : 0.3, f.big ? 0.6 : 0.45, f.big ? 220 : 100);
     var fw = f.big ? FOES.heavy.w : FOES.frame, fh = f.big ? FOES.heavy.h : FOES.frame, cx = f.big ? FOES.heavy.cx : fw / 2, mid = Math.round(f.x + f.w / 2);
     pushEv({ kind: 'gib', x: f.x + f.w / 2, y: f.y + (f.big ? 10 : 4), dir: dir, how: how || 'shot', big: f.big, face: f.dir,
              fx: f.dir > 0 ? mid - cx : mid - (fw - 1 - cx), fy: f.y + f.h - fh, fw: fw });   // where his picture was, so his body parts start there
@@ -556,7 +556,7 @@
   function blowBarrel(bl) {
     bl.state = 'gone';
     var cx = bl.x + bl.w / 2, cy = bl.y + bl.h / 2, i;
-    pushEv({ kind: 'blast', x: cx, y: cy }); addShake(3, 0.25); combat.stop = P.hitStop * 1.5;
+    pushEv({ kind: 'blast', x: cx, y: cy }); addShake(3, 0.25); combat.stop = P.hitStop * 1.5; rumble(1, 0.7, 320);
     for (i = 0; i < foes.length; i++) { var f = foes[i]; if (f.state !== 'dead' && Math.hypot(f.x + f.w / 2 - cx, f.y + f.h / 2 - cy) < P.blastR + (f.big ? 10 : 0)) hurtFoe(f, f.x + f.w / 2 < cx ? -1 : 1, f.big ? P.heavyBlast : 1, 'blast', cy); }
     for (i = 0; i < barrels.length; i++) { var o = barrels[i]; if (o.state === 'idle' && Math.hypot(o.x + o.w / 2 - cx, o.y + o.h / 2 - cy) < P.blastR) { o.state = 'lit'; o.t = P.barrelChain; } }
     if (!pl.dead && fx.mode === 'none' && Math.hypot(pl.x + pl.w / 2 - cx, pl.y + pl.h / 2 - cy) < P.blastR - 4) die();
@@ -658,7 +658,7 @@
             ['MAP', function () { pause.on = false; sel.w = lvl.w; sel.i = lvl.i; toMap(); }],
             ['MENU', function () { pause.on = false; toMenu(); }]];
   }
-  function openPause() { pause.on = true; pause.pick = 0; }
+  function openPause() { pause.on = true; pause.pick = 0; rumbleStop(); }
   function resumePlay() { pause.on = false; pl.prevJump = pl.prevDash = true; }      // the press that chose RESUME is not a jump
   function pauseInput(inp, p) {
     var dy = inp.y && !p.y ? inp.y : (inp.x && !p.x ? inp.x : 0), n = pauseButtons().length;   // the buttons are one row: left and right, or up and down
@@ -685,6 +685,7 @@
     prog[room.id] = { stars: Math.max(stars, old ? old.stars : 0), time: old ? Math.min(old.time, run.time) : run.time, falls: old ? Math.min(old.falls, run.deaths) : run.deaths, gem: gem || !!(old && old.gem) };
     try { localStorage.setItem(PROG_KEY, JSON.stringify(prog)); } catch (e) {}
     dataVer++;
+    rumble(0.45, 0.7, 260);                                     // level clear
     run.won = true; run.result = { stars: stars, par: par, gems: gems.length > 0, next: lvl.i + 1 < levels[lvl.w].length, pick: 0, py: 0 };
   }
   function gotGem() { for (var i = 0; i < gems.length; i++) if (gems[i].state !== 'idle') return true; return false; }
@@ -784,7 +785,7 @@
     pl.jumpBuf = 0; pl.coyote = 0; pl.state = 'normal'; pl.boostT = 0; pl.mantle = null;
     pl.vx = P.bounceH * dir; pl.vy = P.bounceV; pl.varJumpSpeed = pl.vy; pl.varJumpTimer = P.bounceVarTime;
     pl.forceMove = P.bounceForce; pl.forceDir = dir; pl.facing = dir;
-    addShake(1.5, 0.12);
+    addShake(1.5, 0.12); rumble(0.35, 0.45, 110);
   }
   function startDash(inp) {
     var dx = inp.x, dy = inp.y;
@@ -796,10 +797,11 @@
     pl.state = 'dash'; pl.dashTimer = P.dashTime; pl.freeze = P.dashFreeze; pl.dashN = (pl.dashN || 0) + 1;
     pl.stamina -= P.dashCost; pl.dashes = 0; pl.dashCooldown = P.dashCooldown; pl.dashBuf = 0;
     pl.varJumpTimer = 0; pl.forceMove = 0; pl.mantle = null;
+    rumble(0.15, 0.4, 90);                                      // a dash: a short buzz
   }
   function die() {
     if (pl.dead) return;
-    pl.dead = true; run.deaths++; addShake(1.5, 0.12);
+    pl.dead = true; run.deaths++; addShake(1.5, 0.12); rumble(0.8, 0.5, 240);
     for (var gi = 0; gi < gems.length; gi++) if (gems[gi].state === 'follow') { gems[gi].state = 'idle'; gems[gi].fx = gems[gi].x; gems[gi].fy = gems[gi].y; }   // a gem not yet banked goes back
     fx = { mode: 'die', t: 0, x: pl.x, y: Math.min(pl.y, rows * T - pl.h), facing: pl.facing };
   }
@@ -952,7 +954,7 @@
         pl.state = 'normal'; pl.vy = P.springV; pl.varJumpSpeed = pl.vy; pl.varJumpTimer = P.varJumpTime;
         pl.stamina = P.stamina; pl.dashCooldown = 0; pl.forceMove = 0; pl.boostT = 0; pl.jumpBuf = 0; pl.coyote = 0; pl.mantle = null;
         if (pl.y + pl.h > sp.y + 3) pl.y = sp.y + 3 - pl.h;
-        sp.t = 0.25; addShake(1, 0.1);
+        sp.t = 0.25; addShake(1, 0.1); rumble(0.25, 0.55, 130);
       }
     }
     for (i = 0; i < gems.length; i++) {              // gems: touch one and it follows you; it is yours once you stand on solid ground
@@ -979,6 +981,7 @@
       pl.shotCD = P.shotRate; pl.gunT = P.gunHold; pl.shotT = 0;
       var sd = shotDir(); pl.shotDir = sd;
       shots.push({ x: sd > 0 ? pl.x + pl.w + 2 : pl.x - 6, y: pl.y + 3, vx: sd * P.shotSpeed, dist: 0 });
+      rumble(0, 0.18, 35);                                  // a tick in the hand for each shot
     }
     for (i = 0; i < foes.length; i++) {
       var fo = foes[i]; if (fo.state === 'dead' || !overlap(foeBox(fo), pl.x, pl.y, pl.w, pl.h)) continue;
@@ -993,7 +996,7 @@
     for (i = 0; i < refills.length; i++) {
       var rf = refills[i];
       if (rf.timer <= 0 && pl.stamina < P.stamina && overlap(rf, pl.x, pl.y, pl.w, pl.h)) {   // a pickup fills the meter in mid-air
-        pl.dashes = 1; pl.stamina = P.stamina; rf.timer = P.refillRespawn;
+        pl.dashes = 1; pl.stamina = P.stamina; rf.timer = P.refillRespawn; rumble(0, 0.3, 70);
       }
     }
     for (i = 0; i < exits.length; i++) if (overlap(exits[i], pl.x, pl.y, pl.w, pl.h)) {
@@ -1285,6 +1288,34 @@
   try { weather.on = localStorage.getItem(FX_KEY) === '1'; shakeOn = localStorage.getItem(SHAKE_KEY) !== '0'; } catch (e) {}
   if (GB.on) { weather.on = false; shakeOn = false; }       // GAME BOY is the fast mode for the frame: no particles, no shake (CLAUDE.md, Themes)
   function setShake(on) { shakeOn = on; try { localStorage.setItem(SHAKE_KEY, on ? '1' : '0'); } catch (e) {} }
+  // Rumble (Oct 2026): the controller's vibration, through the Gamepad API (vibrationActuator.playEffect 'dual-rumble'
+  // in Chrome, Edge and Safari; hapticActuators[0].pulse where only that exists). strong is the big low motor, weak
+  // the small fast one, both 0 to 1. A weaker effect never cuts off a stronger one still playing. Render side only:
+  // nothing here touches the physics, so recordings and the demo replay exactly. Never in the idle demo or a builder
+  // test. Settings, CONTROLS, RUMBLE (climberwide.rumble.v1, on by default).
+  var RUMBLE_KEY = 'climberwide.rumble.v1', rumbleOn = true, rmb = { until: 0, level: 0, calls: 0 };
+  try { rumbleOn = localStorage.getItem(RUMBLE_KEY) !== '0'; } catch (e) {}
+  function canRumble(gp) { return !!(gp && ((gp.vibrationActuator && gp.vibrationActuator.playEffect) || (gp.hapticActuators && gp.hapticActuators[0] && gp.hapticActuators[0].pulse))); }
+  function rumble(strong, weak, ms, force) {
+    if (!force && (!rumbleOn || demo.on || testMode || embedded)) return;
+    var now = performance.now(), level = Math.max(strong, weak);
+    if (!force && now < rmb.until && level < rmb.level) return;
+    rmb.until = now + ms; rmb.level = level;
+    var pads = allPads();
+    for (var i = 0; i < pads.length; i++) {
+      var gp = pads[i];
+      try {
+        if (gp.vibrationActuator && gp.vibrationActuator.playEffect) { gp.vibrationActuator.playEffect('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: Math.min(1, strong), weakMagnitude: Math.min(1, weak) }).catch(function () {}); rmb.calls++; }
+        else if (gp.hapticActuators && gp.hapticActuators[0] && gp.hapticActuators[0].pulse) { gp.hapticActuators[0].pulse(Math.min(1, level), ms); rmb.calls++; }
+      } catch (e) {}
+    }
+  }
+  function rumbleStop() {
+    rmb.until = 0; rmb.level = 0;
+    var pads = allPads();
+    for (var i = 0; i < pads.length; i++) try { var va = pads[i].vibrationActuator; if (va) { if (va.reset) va.reset().catch(function () {}); else if (va.playEffect) va.playEffect('dual-rumble', { duration: 0, strongMagnitude: 0, weakMagnitude: 0 }).catch(function () {}); } } catch (e) {}
+  }
+  function setRumble(on) { rumbleOn = on; try { localStorage.setItem(RUMBLE_KEY, on ? '1' : '0'); } catch (e) {} if (on) rumble(0.5, 0.6, 180, true); else rumbleStop(); }
   function setWeather(on) {
     weather.on = on; weather.list = [];
     try { localStorage.setItem(FX_KEY, on ? '1' : '0'); } catch (e) {}
@@ -2319,7 +2350,7 @@
     var air = !pl.onGround;
     easeScale(dt);
     if (air) hero.fallV = Math.max(hero.fallV, pl.vy);
-    if (hero.wasAir && !air) { hero.landT = 0.17; var kq = Math.min(1, Math.max(0, (hero.fallV - 120) / 300)); if (kq > 0) { squash(1 + 0.6 * kq, 1 - 0.6 * kq); puff(pl.x + 1, pl.y + pl.h, 2 + Math.round(kq * 3), -25, -15); puff(pl.x + pl.w - 1, pl.y + pl.h, 2 + Math.round(kq * 3), 25, -15); } hero.fallV = 0; }   // land: squash by how hard, dust both ways
+    if (hero.wasAir && !air) { hero.landT = 0.17; var kq = Math.min(1, Math.max(0, (hero.fallV - 120) / 300)); if (kq > 0) { rumble(0.35 * kq, 0.3 + 0.3 * kq, 50 + Math.round(80 * kq)); squash(1 + 0.6 * kq, 1 - 0.6 * kq); puff(pl.x + 1, pl.y + pl.h, 2 + Math.round(kq * 3), -25, -15); puff(pl.x + pl.w - 1, pl.y + pl.h, 2 + Math.round(kq * 3), 25, -15); } hero.fallV = 0; }   // land: squash by how hard, dust both ways
     if (!hero.wasAir && air && pl.vy < 0) squash(pl.vy < -260 ? 0.5 : 0.6, pl.vy < -260 ? 1.5 : 1.4);                  // jump or spring: stretch
     if (hero.wasState === 'climb' && pl.state !== 'climb' && air && pl.vy < 0 && !pl.mantle) squash(0.6, 1.4);            // climb jump (a mantle gets no stretch)
     if (hero.wasState !== 'dash' && pl.state === 'dash') { var ad = Math.abs(pl.dashDirX) > 0.3 && Math.abs(pl.dashDirY) > 0.3; squash(ad ? 1.15 : (Math.abs(pl.dashDirX) > 0.3 ? 1.3 : 0.7), ad ? 0.85 : (Math.abs(pl.dashDirX) > 0.3 ? 0.7 : 1.3)); }   // dash: stretch along it
@@ -2791,7 +2822,7 @@
   var SET_PAGES = {
     top: { title: 'SETTINGS', rows: [['controls', 'CONTROLS', 'BUTTONS AND CONTROLLER SETUP'], ['graphics', 'GRAPHICS', 'EFFECTS AND THE SPEED READOUT'], ['theme', 'THEME', 'ORIGINAL, GAME BOY OR BLACK AND WHITE'], ['back', 'BACK', 'BACK TO THE MENU']] },
     theme: { title: 'THEME', rows: [['t-original', 'ORIGINAL', 'THE GAME IN FULL COLOUR'], ['t-gb', 'GAME BOY', 'FOUR GREENS. THE FAST MODE FOR THE FRAME'], ['t-bw', 'BLACK AND WHITE', 'GAME BOY FLIPPED FOR NIGHT. ALSO FAST'], ['back', 'BACK', 'BACK TO SETTINGS']] },
-    controls: { title: 'CONTROLS', rows: ACTIONS.map(function (a) { return [a[0], a[1], 'act']; }).concat([['redo', 'REDO SETUP', 'LEARN WHICH BUTTON IS WHICH AGAIN'], ['reset', 'RESET BUTTONS', 'BACK TO THE STARTING JOBS'], ['back', 'BACK', 'BACK TO SETTINGS']]) },
+    controls: { title: 'CONTROLS', rows: ACTIONS.map(function (a) { return [a[0], a[1], 'act']; }).concat([['rumble', 'RUMBLE', 'THE CONTROLLER SHAKES ON DASHES, LANDINGS, HITS AND FALLS'], ['redo', 'REDO SETUP', 'LEARN WHICH BUTTON IS WHICH AGAIN'], ['reset', 'RESET BUTTONS', 'BACK TO THE STARTING JOBS'], ['back', 'BACK', 'BACK TO SETTINGS']]) },
     graphics: { title: 'GRAPHICS', rows: [['fx', 'PARTICLES', 'WEATHER DRAWN OVER THE ROOM'], ['shake', 'SHAKE', 'A SMALL KICK ON HARD LANDINGS AND HITS'], ['city', 'CITY LIFE', 'WINDOWS TRAFFIC AND STEAM IN NEON ROW'], ['para', 'PARALLAX', 'THE BACKDROP MOVES IN DEPTH'],
                                  ['speed', 'SPEED READOUT', 'FPS IN THE TOP BAR WHILE PLAYING'], ['back', 'BACK', 'BACK TO SETTINGS']] }
   };
@@ -2808,6 +2839,7 @@
     if (id === 'city') return cityOn ? 'ON' : 'OFF';
     if (id === 'para') return para.on ? 'ON' : 'OFF';
     if (id === 'speed') return check === 1 ? 'ON' : 'OFF';
+    if (id === 'rumble') return rumbleOn ? 'ON' : 'OFF';
     if (id === 't-original') return GB.on ? '' : 'ON';
     if (id === 't-gb') return GB.kind === 'gb' ? 'ON' : '';
     if (id === 't-bw') return GB.kind === 'bw' ? 'ON' : '';
@@ -2835,6 +2867,7 @@
       set.note = 'SWITCHING THEME'; setTimeout(function () { window.location.reload(); }, 150);
       return;
     }
+    if (id === 'rumble') { setRumble(!rumbleOn); set.note = !rumbleOn ? 'RUMBLE OFF' : (!gp ? 'RUMBLE ON. NO CONTROLLER SEEN YET.' : (canRumble(gp) ? 'RUMBLE ON. FEEL THAT?' : 'RUMBLE ON, BUT THIS CONTROLLER OR BROWSER CANNOT RUMBLE')); return; }
     if (!gp) { set.note = 'NO CONTROLLER SEEN. PRESS A BUTTON ON IT.'; return; }
     if (id === 'redo' || !cfgFor(gp)) { startWiz(gp); return; }
     if (id === 'reset') { ownCfg(gp).act = JSON.parse(JSON.stringify(DEF_ACT)); savePads(); set.note = 'BUTTONS RESET'; return; }
@@ -3005,14 +3038,15 @@
       pxText('CLICK THE MOUSE TO CANCEL', RX + RW / 2, 160, 1, C.dim, 'center');
       return;
     }
-    var y = 40;
+    var y = 38;                                                                     // rows 18 tall, 20 apart: room for RUMBLE above the help line
     for (i = 0; i < rows.length; i++) {
       var id = rows[i][0], isA = rows[i][2] === 'act', val = '';
       if (isA) { var bs = []; for (var k = 0; k < ASSIGNABLE.length; k++) if (act[ASSIGNABLE[k]] === id) bs.push(L[ASSIGNABLE[k]]); val = bs.join(' ') || 'NONE'; }
+      else val = setValue(id);
       if (!isA && rows[i - 1] && rows[i - 1][2] === 'act') y += 6;                 // a gap between the actions and the rest
       if (id === 'back') y += 4;
-      row(i, RX, y, RW, 20, rows[i][1], val);
-      y += 23;
+      row(i, RX, y, RW, 18, rows[i][1], val);
+      y += 20;
     }
     var r = rows[set.row];
     pxText(r[2] === 'act' ? 'SELECT THEN PRESS A BUTTON FOR ' + r[1] : r[2], MX, 222, 1, C.text, 'center');
@@ -3264,7 +3298,8 @@
                foes: foes.map(function (f) { return { x: f.x, y: f.y, dir: f.dir, state: f.state, hp: f.hp, big: f.big }; }), barrels: barrels.map(function (b) { return b.state; }), shots: shots.length, foeShots: foeShots.map(function (s) { return { x: s.x, y: s.y, big: s.big }; }) };
     },
     reset: function () { scene = 'play'; mode = 'map'; resetRun(); }, kill: die,
-    view: function () { return { scene: scene, pause: { on: pause.on, pick: pause.pick }, set: { page: set.page, row: set.row, note: set.note }, mode: mode, sel: sel, lvl: lvl, room: room.name, prog: prog, levels: levels.map(function (l) { return l.map(function (r) { return r.name; }); }), result: run.result, time: run.time }; },
+    rumble: function () { return { on: rumbleOn, calls: rmb.calls }; },
+    view: function () { return { scene: scene, pause: { on: pause.on, pick: pause.pick }, set: { page: set.page, row: set.row, note: set.note, id: scene === 'settings' ? setRows()[set.row][0] : '' }, mode: mode, sel: sel, lvl: lvl, room: room.name, prog: prog, levels: levels.map(function (l) { return l.map(function (r) { return r.name; }); }), result: run.result, time: run.time }; },
     weather: function (on) { setWeather(on); return weather.on; },
     city: function (on) { if (on === 'ship') { if (city) city.nextShip = ct; } else if (on !== undefined) setCity(on); return { on: cityOn, live: !!city, movers: city ? city.movers.map(function (m) { return { kind: m.kind, x: Math.round(m.x), y: m.y }; }) : [], stats: city ? city.stats : null, lanes: city ? city.lanes.map(function (l) { return l.depth.charAt(1) + l.y; }) : [], chunks: chunkCopies, tick: tick, ms: fps.ms, fps: fps.now }; },
     nav: function (o) { screenInput(Object.assign({ x: 0, y: 0, jump: false, dash: false, grab: false, back: false, pageL: false, pageR: false }, o)); screenInput({ x: 0, y: 0, jump: false, dash: false, grab: false, back: false, pageL: false, pageR: false }); return this.view(); },
