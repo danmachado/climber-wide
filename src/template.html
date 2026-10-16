@@ -192,7 +192,6 @@
 /*SHARED_CONFIG*/
   var LIVE_KEY = 'climberwide.live.v1';
   var starters = JSON.parse(document.getElementById('starter-rooms').textContent); // built-in set, also the offline fallback
-  var pool = starters, queue = [];
   // Worlds and levels. Built-in rooms fill every slot; a published level with the same world and number takes that slot over.
   var PROG_KEY = 'climberwide.progress.v1', prog = {}, levels = [], liveRooms = [], dataVer = 0, unlockAll = location.hash === '#unlock';
   try { prog = JSON.parse(localStorage.getItem(PROG_KEY)) || {}; } catch (e) {}
@@ -225,30 +224,8 @@
     for (var j = i - 1; j >= 0; j--) if (!levels[w][j].trial) return beaten(levels[w][j]);
     return true;
   }
-  function endlessPool() {
-    var out = [];
-    for (var w = 0; w < levels.length; w++) if (worldOpen(w)) out = out.concat(levels[w]);
-    return out.length ? out : starters;
-  }
   function usable(d) {
     return d && d.format === 1 && d.grid && d.grid.cols * d.grid.tile === LW && (d.grid.rows * d.grid.tile === LH || d.grid.rows * d.grid.tile === 2 * LH) && d.tiles && d.tiles.length === d.grid.rows;
-  }
-  // The endless run: easier rooms first, shuffled inside each difficulty, then round again.
-  function nextFromQueue() {
-    if (!queue.length) {
-      pool = endlessPool();
-      var byDiff = {}, keys = [], i, j, k;
-      for (i = 0; i < pool.length; i++) { k = pool[i].difficulty || 1; if (!byDiff[k]) { byDiff[k] = []; keys.push(k); } byDiff[k].push(pool[i]); }
-      keys.sort(function (a, b) { return a - b; });
-      for (i = 0; i < keys.length; i++) {
-        var list = byDiff[keys[i]];
-        for (j = list.length - 1; j > 0; j--) { k = Math.floor(Math.random() * (j + 1)); var tmp = list[j]; list[j] = list[k]; list[k] = tmp; }
-        queue = queue.concat(list);
-      }
-      var f = levels[0] && levels[0][0], at = f ? queue.indexOf(f) : -1;   // the very first level always opens a run
-      if (at > 0) { queue.splice(at, 1); queue.unshift(f); }
-    }
-    return queue.shift();
   }
   // Published rooms are fetched as plain data. If that fails, the last good copy is used, then the built-in set.
   // One published record is not a room: it holds the order of the levels on the map (set in the builder's Game map).
@@ -257,7 +234,7 @@
     var ok = [], doc = null;
     for (var i = 0; i < (list || []).length; i++) { if (list[i] && list[i].kind === 'map') doc = list[i]; else if (usable(list[i])) ok.push(list[i]); }
     mapOrder = (doc && doc.order) || {};
-    liveRooms = ok; queue = []; rebuildLevels();
+    liveRooms = ok; rebuildLevels();
     return ok.length + (doc ? 1 : 0);
   }
   function fetchLive() {
@@ -670,15 +647,15 @@
     };
     for (var i = 0; i < refills.length; i++) refills[i].timer = 0;
   }
-  // scene: 'menu', 'map' or 'play'. mode: how rooms follow each other while playing, 'map' (one chosen level) or 'endless'.
-  var scene = 'play', mode = 'endless', sel = { menu: 0, w: 0, i: 0 }, lvl = { w: 0, i: 0 };
+  // scene: 'menu', 'map' or 'play'. mode is always 'map' on wide (one chosen level; Dan, Oct 2026: no endless run).
+  var scene = 'play', mode = 'map', sel = { menu: 0, w: 0, i: 0 }, lvl = { w: 0, i: 0 };
   function staged() { return mode === 'map' && !testMode && !demo.on; }
   // Pause: Start (or Esc) in a level stops the game and shows a menu. Nothing steps while it is up, so the clock,
   // movers and hazards hold still; the picture is drawn once into the full-screen HUD layer, like the level clear panel.
   var pause = { on: false, pick: 0 };
   function pauseButtons() {
-    return [['RESUME', resumePlay], ['RESTART', function () { pause.on = false; if (mode === 'map') startLevel(lvl.w, lvl.i); else startEndless(); }],
-            ['MAP', function () { pause.on = false; if (mode === 'map') { sel.w = lvl.w; sel.i = lvl.i; } toMap(); }],
+    return [['RESUME', resumePlay], ['RESTART', function () { pause.on = false; startLevel(lvl.w, lvl.i); }],
+            ['MAP', function () { pause.on = false; sel.w = lvl.w; sel.i = lvl.i; toMap(); }],
             ['MENU', function () { pause.on = false; toMenu(); }]];
   }
   function openPause() { pause.on = true; pause.pick = 0; }
@@ -693,15 +670,14 @@
   // A fresh run. In a builder test it replays the room being edited; in the demo it plays the first built-in room.
   function resetRun() {
     pause.on = false;
-    run = { deaths: 0, time: 0, won: false, count: 1, result: null };
+    run = { deaths: 0, time: 0, won: false, result: null };
     if (!testMode) {
       if (demo.on) buildRoom(demo.room || starters[0]);
-      else if (mode === 'map' && levels[lvl.w] && levels[lvl.w][lvl.i]) buildRoom(levels[lvl.w][lvl.i]);
-      else { queue = []; buildRoom(nextFromQueue()); }
+      else buildRoom((levels[lvl.w] && levels[lvl.w][lvl.i]) || starters[0]);
     }
     startSpawn();
   }
-  function nextRoom() { if (staged()) { finishLevel(); return; } run.count++; buildRoom(nextFromQueue()); startSpawn(); }
+  function nextRoom() { finishLevel(); }             // reaching the exit (never in a builder test or the demo) scores the level
   // A level on the map is scored when you reach the exit: a star for beating it, one for few falls, one for par time.
   // The clock is the winning attempt only (it restarts on each respawn); falls count since you entered the level.
   function finishLevel() {
@@ -726,13 +702,12 @@
     mode = 'map'; scene = 'play'; lvl = { w: w, i: i }; sel.w = w; sel.i = i;
     resetRun(); pl.prevJump = pl.prevDash = true; allDirty = true; lastSig = '';
   }
-  function startEndless() { mode = 'endless'; scene = 'play'; resetRun(); pl.prevJump = pl.prevDash = true; allDirty = true; lastSig = ''; }
   function clearButtons() {
     var list = [['RETRY', function () { startLevel(lvl.w, lvl.i); }], ['MAP', function () { afterLevel(false); }]];
     if (run.result && run.result.next) list.unshift(['NEXT LEVEL', function () { afterLevel(true); }]);
     return list;
   }
-  function leavePlay() { if (run.won && run.result && staged()) { afterLevel(false); return; } if (mode === 'map') { sel.w = lvl.w; sel.i = lvl.i; toMap(); } else toMenu(); }
+  function leavePlay() { if (run.won && run.result && staged()) { afterLevel(false); return; } sel.w = lvl.w; sel.i = lvl.i; toMap(); }
   function afterLevel(goOn) {
     var w = lvl.w, i = lvl.i;
     if (goOn && i + 1 < levels[w].length) { startLevel(w, i + 1); return; }
@@ -1195,7 +1170,7 @@
     function next() { demo.stage++; demo.t0 = demo.f; }
     if (run.won) { if (++demo.winT > 100) startDemo(); return inp; }
     if (demo.rec) {                                // a recorded run: play the next input, move on if it ever goes wrong
-      if (pl.dead || demo.rk >= demo.rec.length) { if (demo.on) startDemo(); return inp; }   // a recording replayed as a real run (chainProbe) just stops
+      if (pl.dead || demo.rk >= demo.rec.length) { if (demo.on) startDemo(); return inp; }   // a recording replayed outside the demo just stops
       var code = demo.rec[demo.rk];
       if (--demo.rleft <= 0) { demo.rk += 2; demo.rleft = demo.rec[demo.rk + 1] || 0; }
       inp.x = code % 3 - 1; inp.y = Math.floor(code / 3) % 3 - 1; inp.jump = !!(Math.floor(code / 9) % 2); inp.dash = !!(Math.floor(code / 18) % 2); inp.grab = !!(Math.floor(code / 36) % 2); inp.shoot = code >= 72;
@@ -1915,7 +1890,7 @@
     }
     else drawBody(pl.x + tremble(), pl.y, pl.h, pl.facing, pl.stamina < P.tiredBelow ? C.tired : C.body, pl.dashes > 0 ? C.flame : C.flameOut);
     drawShots(); drawSparks(cdt); if (limbs.length) stepLimbs(cdt); if (gibs.length) stepGibs(cdt); if (blasts.length) drawBlasts(cdt);
-    var sig = [pause.on, pause.pick, padVer, mode, gems.length ? gotGem() : 0, shaky() ? Math.floor(tick / 6) % 2 : 0, run.result ? run.result.pick : 0, Math.ceil(pl.stamina / P.stamina * 10 - 0.001), pl.stamina >= P.dashCost, hud.width, run.deaths, Math.floor(run.time), run.won, usedPad, demo.on, testMode, room.name, run.count, check, fps.now, fps.low, fps.ms, fps.city, cityOn, wiz.on, wiz.i, wiz.armed, wiz.on ? wiz.see : '', check ? padInfo : ''].join('|');
+    var sig = [pause.on, pause.pick, padVer, mode, gems.length ? gotGem() : 0, shaky() ? Math.floor(tick / 6) % 2 : 0, run.result ? run.result.pick : 0, Math.ceil(pl.stamina / P.stamina * 10 - 0.001), pl.stamina >= P.dashCost, hud.width, run.deaths, Math.floor(run.time), run.won, usedPad, demo.on, testMode, room.name, check, fps.now, fps.low, fps.ms, fps.city, cityOn, wiz.on, wiz.i, wiz.armed, wiz.on ? wiz.see : '', check ? padInfo : ''].join('|');
     flush();
     drawWeather();
     var hy0 = (fx.mode === 'none' ? pl.y : fx.y) - (cam.y || 0), hx0 = fx.mode === 'none' ? pl.x + pl.w / 2 : fx.x;
@@ -2508,7 +2483,7 @@
     pxText(cs, MX, (D - 0.5 - 7 * csc) / 2, csc, late ? C.hurt : C.text, 'center');
 
     // right: the level tag as a key cap at the edge, and before it the stars you would earn if you finished now
-    var tag = testMode ? 'TEST' : demo.on ? 'DEMO' : mode === 'map' ? (lvl.w + 1) + '-' + (lvl.i + 1) : String(run.count), tw = tag.length * 6 + 5, tx = LW - 3 - tw;
+    var tag = testMode ? 'TEST' : demo.on ? 'DEMO' : (lvl.w + 1) + '-' + (lvl.i + 1), tw = tag.length * 6 + 5, tx = LW - 3 - tw;
     hudRound(u, tx, 3, tw, 11, 1.5, EDGE); hudRound(u, tx + 1, 4, tw - 2, 9, 1, '#1a2140');
     pxText(tag, tx + 3, 5, 1, th.accent, 'left');
     if (!par) return;
@@ -2620,7 +2595,7 @@
     box(0, 0, LW, LH, 'rgba(7,9,20,0.72)');
     box(MX - cw / 2, top + 5, cw, hh, INK);
     box(MX - cw / 2, top, cw, hh, th.accent);
-    var where = mode === 'map' ? 'LEVEL ' + (lvl.w + 1) + '-' + (lvl.i + 1) : 'ENDLESS  ROOM ' + run.count;
+    var where = 'LEVEL ' + (lvl.w + 1) + '-' + (lvl.i + 1);
     pxText(where, MX, top + 10, 1, INK, 'center');
     pxText((room.name || '').toUpperCase().replace(/[^A-Z0-9 .:\/-]/g, '').substring(0, 30), MX, top + 21, 1, INK, 'center');
     pxText('PAUSED', MX, top + 34, 4, INK, 'center');
@@ -2659,12 +2634,11 @@
   // ---- menu and map screens ----
   // These are still pictures: drawn once when something changes, then left alone, so they cost the frame nothing.
   var hits = [], navPrev = { x: 0, y: 0, jump: false, dash: false, back: false };
-  var MENU = [['MAP', 'Climb through the worlds, level by level', function () { sel.w = Math.min(sel.w, levels.length - 1); toMap(); }],
-              ['ENDLESS', 'Every level you have unlocked, shuffled', startEndless],
+  var MENU = [['START', 'Climb through the worlds, level by level', function () { sel.w = Math.min(sel.w, levels.length - 1); toMap(); }],   // opens the map
               ['SETTINGS', 'Controls and graphics', openSettings],
               ['RELOAD', 'Fetch the newest version of the game', reloadGame]];   // wide: no EXIT (Dan, Oct 2026: the app closes the normal way)
   var menuNote = '';
-  var MENU_BIG = 2;                                  // MENU's first two are the big buttons; the rest are icons in a row at the bottom
+  var MENU_BIG = 1;                                  // MENU's first two are the big buttons; the rest are icons in a row at the bottom
   var MENU_ICONS = {                                 // pixel icons for the small buttons (any size, drawn 2 game px a dot): a gear, a refresh arrow, a power symbol
     SETTINGS: ['.....##.....', '.##..##..##.', '.##########.', '..########..', '.##########.', '#####..#####', '#####..#####', '.##########.', '..########..', '.##########.', '.##..##..##.', '.....##.....'],
     RELOAD:   ['...######...', '..########.#', '.###....####', '###......###', '##......####', '##..........', '##........##', '##........##', '###......###', '.###....###.', '..########..', '...######...']
@@ -2683,10 +2657,7 @@
     if (cur) lines.push(cur);
     return lines;
   }
-  // The main menu: the hero, the title, MAP and ENDLESS as two big buttons, and settings, reload and exit as a row of
-  // small icon buttons. Under them, what the chosen one does. A still picture, drawn only when something changes.
-  // The title, lettered by hand: chunky slab-serif capitals on a 7 x 9 grid (original), filled with horizontal bands from
-  // pale yellow to deep red, lit along every top edge, with an indigo drop shadow a cell down and right and a dark outline.
+  // The title's capitals, on a 7 x 9 grid (original); drawTerrainWord builds them out of the world's terrain.
   var LOGO = {
     C: ['.#####.', '##...##', '##.....', '##.....', '##.....', '##.....', '##.....', '##...##', '.#####.'],
     L: ['####...', '.##....', '.##....', '.##....', '.##....', '.##....', '.##....', '.##..##', '#######'],
@@ -2696,26 +2667,10 @@
     E: ['#######', '.##...#', '.##....', '.#####.', '.##....', '.##....', '.##....', '.##...#', '#######'],
     R: ['######.', '.##..##', '.##..##', '.##..##', '.#####.', '.##.##.', '.##..##', '.##..##', '###.###']
   };
-  var LOGO_BANDS = ['#fff07a', '#ffd84a', '#ffbd36', '#ffa02a', '#ff8524', '#f76a22', '#ea5024', '#da3c27', '#c22d2d'];
-  function drawLogo(box, cx, y, sc) {
-    var word = 'CLIMBER', cells = [], on = {}, x = 0, i, r, c, k;
-    for (i = 0; i < word.length; i++) {
-      var g = LOGO[word.charAt(i)];
-      for (r = 0; r < g.length; r++) for (c = 0; c < g[r].length; c++) if (g[r].charAt(c) === '#') { cells.push([x + c, r]); on[(x + c) + ',' + r] = 1; }
-      x += g[0].length + 2;
-    }
-    var x0 = cx - (x - 2 + 1) * sc / 2;
-    function px(cx2, cy2, col) { box(x0 + cx2 * sc, y + cy2 * sc, sc, sc, col); }
-    for (k = 0; k < cells.length; k++) for (var dx = -1; dx <= 2; dx++) for (var dy = -1; dy <= 2; dy++) px(cells[k][0] + dx, cells[k][1] + dy, '#05070e');   // outline round letter and shadow
-    for (k = 0; k < cells.length; k++) if (!on[(cells[k][0] + 1) + ',' + (cells[k][1] + 1)]) px(cells[k][0] + 1, cells[k][1] + 1, '#3a3db8');   // the drop shadow
-    for (k = 0; k < cells.length; k++) {
-      var cx3 = cells[k][0], cy3 = cells[k][1], top = !on[cx3 + ',' + (cy3 - 1)];
-      px(cx3, cy3, top ? (cy3 < 3 ? '#fff6c0' : LOGO_BANDS[Math.max(0, cy3 - 2)]) : LOGO_BANDS[cy3]);
-    }
-  }
+
   // The main menu is a little level (Oct 2026): the painted scene of the world last picked on the map, a floor, the
   // title spelled out in that world's own terrain tiles (lit edges, chips, snow caps, moss, drips, all from drawSolid),
-  // MAP and ENDLESS as terrain slabs with a recessed plate, the small buttons as terrain blocks, and what the chosen one
+  // START as a terrain slab with a recessed plate, the small buttons as terrain blocks, and what the chosen one
   // does on a sign of backdrop brick. The art is built once per world and theme into a 480 x 270 canvas (menuArt) and
   // laid under the labels; a redraw on a change is one scaled copy plus the labels, so the menu still costs nothing at rest.
   // The title: the arcade capitals of LOGO, built out of the world's terrain at 6 px a cell. Each pixel is shaded the way
@@ -2760,7 +2715,7 @@
     }
     return { x: x0, y: y, w: W, h: H };
   }
-  var MLAY = { slabRow: 9, slabH: 4, slabW: 18, slabCols: [4, 26], blockRow: 14, block: 4, blockCols: [19, 25], floorRow: 24 };
+  var MLAY = { slabRow: 9, slabH: 4, slabW: 18, slabCols: [15], blockRow: 14, block: 4, blockCols: [19, 25], floorRow: 24 };
   var menuArt = { key: '', cv: null };
   function menuWorld() { return Math.max(0, Math.min(WORLDS.length - 1, sel.w | 0)); }
   function menuGrid() {                              // the menu as a room grid: '#' terrain, 'b' backdrop, '.' open
@@ -2803,7 +2758,7 @@
     function frame(x, y, ww, hh) { box(x - 3, y - 3, ww + 6, 2, ACC); box(x - 3, y + hh + 1, ww + 6, 2, ACC); box(x - 3, y - 1, 2, hh + 2, ACC); box(x + ww + 1, y - 1, 2, hh + 2, ACC); }
     function chev(x, y, dir) { for (var q = 0; q < 5; q++) box(x + (dir > 0 ? q : -q), y + q, 1, 11 - 2 * q, ACC); }
     var hit = function (kk) { return function () { sel.menu = kk; MENU[kk][2](); }; };
-    for (i = 0; i < MENU_BIG; i++) {                                 // MAP and ENDLESS: terrain slabs
+    for (i = 0; i < MENU_BIG; i++) {                                 // START: a terrain slab
       var on = i === sel.menu, x = MLAY.slabCols[i] * T, y = MLAY.slabRow * T, sw = MLAY.slabW * T, sh = MLAY.slabH * T;
       if (on) { glow(x + sw / 2, y + sh / 2, sw * 0.6, 0.3); frame(x, y, sw, sh); }
       plate(x + 10, y + 7, sw - 20, sh - 13);
@@ -3308,7 +3263,7 @@
                drones: drones.map(function (d) { return { x: d.x, y: d.y, dir: d.dir, wait: d.wait, fire: d.fire }; }),
                foes: foes.map(function (f) { return { x: f.x, y: f.y, dir: f.dir, state: f.state, hp: f.hp, big: f.big }; }), barrels: barrels.map(function (b) { return b.state; }), shots: shots.length, foeShots: foeShots.map(function (s) { return { x: s.x, y: s.y, big: s.big }; }) };
     },
-    reset: function () { scene = 'play'; mode = 'endless'; resetRun(); }, kill: die,
+    reset: function () { scene = 'play'; mode = 'map'; resetRun(); }, kill: die,
     view: function () { return { scene: scene, pause: { on: pause.on, pick: pause.pick }, set: { page: set.page, row: set.row, note: set.note }, mode: mode, sel: sel, lvl: lvl, room: room.name, prog: prog, levels: levels.map(function (l) { return l.map(function (r) { return r.name; }); }), result: run.result, time: run.time }; },
     weather: function (on) { setWeather(on); return weather.on; },
     city: function (on) { if (on === 'ship') { if (city) city.nextShip = ct; } else if (on !== undefined) setCity(on); return { on: cityOn, live: !!city, movers: city ? city.movers.map(function (m) { return { kind: m.kind, x: Math.round(m.x), y: m.y }; }) : [], stats: city ? city.stats : null, lanes: city ? city.lanes.map(function (l) { return l.depth.charAt(1) + l.y; }) : [], chunks: chunkCopies, tick: tick, ms: fps.ms, fps: fps.now }; },
@@ -3337,14 +3292,7 @@
       scene = 'play'; demo.on = true; demo.rec = DEMOS[id] || null; demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0; demo.stage = 1; demo.f = 0; demo.t0 = 0; demo.back = false; demo.winT = 0; allDirty = true; lastSig = ''; resetRun();
     },
     demoStart: function () { startDemo(); }, demoStep: function (n) { for (var i = 0; i < n; i++) step(demoInput()); return this.state(); },
-    chainProbe: function () { // plays room one as a normal run with the demo's inputs, to prove the exit leads to room two
-      scene = 'play'; mode = 'endless';
-      demo.rec = DEMOS[room.id] || null; demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0; demo.stage = 1; demo.f = 0; demo.t0 = 0; demo.back = false;
-      var n = 0, none = { x: 0, y: 0, jump: false, dash: false, grab: false };
-      while (run.count === 1 && n < 3000) { step(demoInput()); n++; }
-      for (var i = 0; i < 40; i++) step(none);
-      return { steps: n, count: run.count, room: room.name, falls: run.deaths, x: pl.x, y: pl.y, pool: pool.length };
-    }, load: function (data) { testMode = true; scene = 'play'; buildRoom(data); resetRun(); },
+    load: function (data) { testMode = true; scene = 'play'; buildRoom(data); resetRun(); },
     tune: function (k, v) { var old = P[k]; if (v !== undefined) P[k] = v; return old; },   // tests only: switch a move off to prove a room needs it
     // Save and restore everything the physics reads, so a solver can try many inputs from one moment (tests only).
     snap: function () {

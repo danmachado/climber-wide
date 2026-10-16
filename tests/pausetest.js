@@ -39,9 +39,6 @@ const { chromium } = require('playwright');
   const bx = await p.evaluate(() => { const c = document.getElementById('stage').getBoundingClientRect(); return { x: c.left, y: c.top, w: c.width, h: c.height }; });
   for (let k = 0; k < 2; k++) { await p.mouse.click(bx.x + (240 + 162) / 480 * bx.w, bx.y + (48 + 94 + 13) / 270 * bx.h); await p.waitForTimeout(200); }
   v = await V(); ok(v.scene === 'menu', 'clicking MAIN MENU works');
-  // endless: pause works there too
-  await p.evaluate(() => window.__climber.nav({ x: 1 })); await p.evaluate(() => window.__climber.nav({ jump: true })); await p.waitForTimeout(800);   // ENDLESS is right of MAP
-  await key('Escape'); v = await V(); ok(v.mode === 'endless' && v.pause.on, 'pause works in endless');
   await p.screenshot({ path: __dirname + '/pause-3.png' });
   console.log('errors', JSON.stringify(errs));
   console.log(fails ? fails + ' FAILED' : 'ALL PASS');
