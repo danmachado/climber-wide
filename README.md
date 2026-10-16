@@ -1,6 +1,6 @@
-# Climber
+# Climber Wide
 
-A single-screen precision platformer for the wall frame, plus its room builder.
+The landscape (480 x 270) version of Climber, for laptops, TVs and iPads, plus its room builder. The wall frame's portrait version lives in `danmachado/climber`.
 
 - `index.html` is the game.
 - `builder/` is the room builder (paint, auto-build, play test, publish).
