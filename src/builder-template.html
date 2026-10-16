@@ -148,6 +148,9 @@
             <button type="button" data-v="zips" aria-pressed="true">Zip movers</button>
             <button type="button" data-v="keys" aria-pressed="true">Key and door</button>
             <button type="button" data-v="refills" aria-pressed="true">Stamina pickups</button>
+            <button type="button" data-v="raiders" aria-pressed="true">Raiders</button>
+            <button type="button" data-v="barrels" aria-pressed="true">Barrels</button>
+            <button type="button" data-v="heavies" aria-pressed="true">Heavies</button>
             <button type="button" data-v="springs" aria-pressed="true">Springs</button>
             <button type="button" data-v="gems" aria-pressed="true">Gem</button>
           </div>
@@ -626,6 +629,7 @@
     if (st.springs) bits.push(st.springs + (st.springs === 1 ? ' spring' : ' springs')); if (st.gems) bits.push('a gem');
     if (st.fire) bits.push(st.fire + ' fire'); if (st.fireballs) bits.push(st.fireballs + (st.fireballs === 1 ? ' fireball' : ' fireballs'));
     if (st.ice) bits.push(st.ice + ' ice'); if (st.crumble) bits.push(st.crumble + ' crumble'); if (st.platforms) bits.push(st.platforms + (st.platforms === 1 ? ' platform' : ' platforms')); if (st.zips) bits.push(st.zips + (st.zips === 1 ? ' zip mover' : ' zip movers')); if (st.keys) bits.push('a key and a door'); if (st.jets) bits.push(st.jets + (st.jets === 1 ? ' fire jet' : ' fire jets')); if (st.lava) bits.push('rising lava'); if (st.lasers) bits.push(st.lasers + (st.lasers === 1 ? ' laser' : ' lasers')); if (st.drones) bits.push(st.drones + (st.drones === 1 ? ' drone' : ' drones')); if (st.wires) bits.push(st.wires + (st.wires === 1 ? ' spark' : ' sparks')); if (st.holos) bits.push(st.holos + (st.holos === 1 ? ' holo sign' : ' holo signs'));
+    if (st.raiders) bits.push(st.raiders + (st.raiders === 1 ? ' raider' : ' raiders')); if (st.barrels) bits.push(st.barrels + (st.barrels === 1 ? ' barrel' : ' barrels')); if (st.heavies) bits.push(st.heavies + (st.heavies === 1 ? ' heavy' : ' heavies'));
     changed(); say('Built room ' + seed + ': ' + bits.join(', ') + '. Undo brings back what you had.');
   }
   $('g-go').addEventListener('click', function () { autoBuild(Math.floor(Math.random() * 90000) + 10000); });

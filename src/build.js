@@ -68,6 +68,18 @@ var TALL = [
   ['The Pyramid',  { difficulty: 3, obstacles: 1, styles: [],        spikes: 1, elements: { spikes: true, refills: true, zips: true, springs: true, lasers: true, drones: true, gems: true, keys: true }, world: 4, rows: 54 }, 7414],
   ['The Tower',    { difficulty: 3, obstacles: 1, styles: ['climb'], layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, zips: true, springs: true, crumble: true, gems: true, keys: true }, world: 5, rows: 54 }, 7515]
 ];
+// Bad guys (Dan, Oct 2026): every floors level after a world's first gets raiders; barrels from a world's fourth level;
+// heavies on the harder levels. Island levels have none yet (the auto-builder only places them along a floor).
+function arm(set) {
+  set.forEach(function (s, i) {
+    var o = s[1];
+    if (o.layout === 'islands' || i === 0) return;
+    o.elements.raiders = true;
+    if (i >= 3) o.elements.barrels = true;
+    if (o.difficulty >= 3) o.elements.heavies = true;
+  });
+}
+[SET, SET2, SET3, SET4, SET5].forEach(arm);
 var starters = [], plans = [];
 SET.forEach(function (s, i) {
   s[1].world = 1;

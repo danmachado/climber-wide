@@ -43,7 +43,7 @@
     function set(x, y, ch) { if (x >= 1 && x <= R && y >= 1 && y <= ROWS - 3) g[y][x] = ch; }
     function fill(x0, x1, y0, y1, ch) { for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) set(xx, yy, ch); }
     function at(x, y) { return (x >= 0 && x <= E && y >= 0 && y < ROWS) ? g[y][x] : '#'; }
-    var stats = { floors: 0, obstacles: 0, spikes: 0, ice: 0, crumble: 0, platforms: 0, zips: 0, fire: 0, fireballs: 0, springs: 0, gems: 0, keys: 0, jets: 0, lava: 0, lasers: 0, drones: 0, wires: 0, holos: 0, islands: 0 };
+    var stats = { floors: 0, obstacles: 0, spikes: 0, ice: 0, crumble: 0, platforms: 0, zips: 0, fire: 0, fireballs: 0, springs: 0, gems: 0, keys: 0, jets: 0, lava: 0, lasers: 0, drones: 0, wires: 0, raiders: 0, barrels: 0, heavies: 0, holos: 0, islands: 0 };
     // Hops follow two fixed recipes the auto-player replays exactly: a full jump from the slab edge at run speed, or the
     // same with a sideways dash five frames in. REACH lists, per rise, the gaps each recipe was measured to land
     // (tests/reach.js against the real physics), so every hop the builder places is one the recipe clears.
@@ -252,7 +252,7 @@
     };
     var target = [1, 2, 9][opts.obstacles];
     var plan = [], y = ROWS - 2, d = rnd() < 0.5 ? 1 : -1, Wprev = 0, prevType = '', off = 0, floor = 0;
-    var stats = { floors: 0, obstacles: 0, spikes: 0, ice: 0, crumble: 0, platforms: 0, zips: 0, fire: 0, fireballs: 0, springs: 0, gems: 0, keys: 0, jets: 0, lava: 0, lasers: 0, drones: 0, wires: 0, holos: 0 };
+    var stats = { floors: 0, obstacles: 0, spikes: 0, ice: 0, crumble: 0, platforms: 0, zips: 0, fire: 0, fireballs: 0, springs: 0, gems: 0, keys: 0, jets: 0, lava: 0, lasers: 0, drones: 0, wires: 0, raiders: 0, barrels: 0, heavies: 0, holos: 0 };
     function zipPick() { return EL.zips && (!EL.movers || rnd() < 0.5); }   // a platform spot becomes a zip mover
     var gemFloor = EL.gems !== false ? ri(0, 2) : -1;                                   // one gem, over a hazard on an early floor
     g[ROWS - 3][col(2, d)] = 'S';
@@ -287,6 +287,7 @@
         var room = e0 - cur;
         var canWall = (top || (conn.type !== 'steps' && conn.type !== 'spring')) && headroom >= 7;   // these ways up fix the floor height, so no tall walls
         var canDrop = canWall && SP > 0 && D >= 4 && headroom >= 8;
+        var gapBefore = obs.length ? lastGap : cur - s0 + 2;                              // clear tiles behind the next obstacle, where the hero can stand (he lands about two tiles short of s0)
         var w = {
           spikes: HZ > 0 && room >= 3 ? (likes('jump') ? 5 : 3) * (SP > 1 ? 2 : 1) : 0,
           wide: HZ > 0 && TUNE.wideW && room >= TUNE.wideW[0] + 2 ? (likes('dash') ? 8 : 2) * (D >= 4 ? 1.5 : 1) : 0,
@@ -300,7 +301,13 @@
           ferry: (EL.movers || EL.zips) && (HZ > 0 || floor > 0) && room >= TUNE.ferryW[0] + 1 ? 4 : 0,    // ride a platform across a gap
           fireball: (EL.fireballs || EL.wires) && room >= 2 && headroom >= 6 ? 4 : 0,        // time a run under a fireball (or a spark) on a track
           jet: (EL.jets || EL.lasers || EL.holos) && room >= 2 && headroom >= 6 ? 4 : 0,     // wait for a fire jet (or a laser, or a holo sign) to die down, then run past
-          drone: EL.drones && room >= 2 && headroom >= 6 ? 4 : 0                              // time a run under a patrol drone
+          drone: EL.drones && room >= 2 && headroom >= 6 ? 4 : 0,                             // time a run under a patrol drone
+          // combat (CLAUDE.md, Combat): a raider on his beat, a raider behind a barrel, or a heavy. The heavy wins any duel on
+          // his level inside his pellets' range (about 14 tiles from his centre), so he only goes where the floor before him gives 17 clear tiles
+          // to shoot from; the hero's shots carry 19.
+          raider: EL.raiders && room - Math.max(0, (obs.length ? 5 : 6) - gapBefore) >= 4 ? 4 * (D >= 3 ? 1.5 : 1) : 0,
+          nest: EL.raiders && EL.barrels && room - Math.max(0, (obs.length ? 5 : 6) - gapBefore) >= 6 ? 3 : 0,
+          heavy: EL.heavies && headroom >= 5 && room - Math.max(0, 17 - gapBefore) >= 7 ? (D >= 3 ? 3 : 1.5) : 0
         };
         // "Some" spikes means every floor has at least one; "Lots" removed the harmless options above
         if (HZ === 1 && SP < 2 && !spiked && (w.spikes || w.wide || w.crown || w.wallspikes || w.icespikes)) { w.block = 0; w.wall = 0; w.iceblock = 0; }
@@ -310,6 +317,8 @@
         var type = pick(w);
         if (!type) break;
         if (type === 'crown') { cur += runup; room -= runup; }
+        if (type === 'heavy') { var hr = Math.max(0, 17 - gapBefore); cur += hr; room -= hr; }   // 17 tiles of floor before a heavy: his pellets reach 14 from his centre and his beat brings him 3 nearer
+        if (type === 'raider' || type === 'nest') { var aw = Math.max(0, (obs.length ? 5 : 6) - gapBefore); cur += aw; room -= aw; }   // a raider's beat is three tiles each way: two clear tiles to stand on before it, six from a landing (the hero arrives mid-jump and in sight)
         var o = { type: type, t0: cur }, after = rr(TUNE.gap);
         if (type === 'spikes') { o.w = Math.min(rr(TUNE.spikeW), room - 1, lastGap <= 3 ? 5 : 6); } // the last tile before the way up stays clear
         else if (type === 'wide') { o.w = Math.min(rr(TUNE.wideW), room - 2); after = Math.max(6, after); } // a dash carries you further, so more room to land
@@ -322,9 +331,12 @@
         else if (type === 'fireball') { o.w = 1; after = Math.max(3, after); }
         else if (type === 'jet') { o.w = 1; o.laser = !!EL.lasers; o.holo = !!EL.holos; after = Math.max(3, after); }
         else if (type === 'drone') { o.w = 4; after = Math.max(3, after); }
+        else if (type === 'raider') { o.w = 1; after = Math.max(3, after); }
+        else if (type === 'nest') { o.w = 3; after = Math.max(3, after); }                 // the raider stands at the near end, the barrel two tiles past him
+        else if (type === 'heavy') { o.w = 3; after = Math.max(3, after); }                // three tiles across for his body, his feet on the middle one
         else if (type === 'wall') { o.w = 2; o.h = Math.min(rr(TUNE.wallH), headroom - 3); minHf = Math.max(minHf, o.h + 4); after = 5; }
         else { o.h = 4; o.sw = Math.min(D >= 5 ? ri(3, 4) : ri(2, 3), room - 3); o.w = 2 + o.sw; minHf = Math.max(minHf, 9); }
-        if (type !== 'block' && type !== 'wall' && type !== 'iceblock' && type !== 'bridge' && !(type === 'ferry' && o.pit)) spiked++;
+        if (type !== 'block' && type !== 'wall' && type !== 'iceblock' && type !== 'bridge' && type !== 'raider' && type !== 'nest' && type !== 'heavy' && !(type === 'ferry' && o.pit)) spiked++;
         // in the Furnace most floor hazards are flames
         if (EL.firepits && (type === 'spikes' || type === 'wide' || type === 'ferry')) o.fire = SP === 0 || rnd() < 0.75;
         obs.push(o);
@@ -375,6 +387,9 @@
           put(ob.t0, d, y - 1, ob.holo ? '%' : ob.laser ? 'L' : 'J'); if (ob.holo) stats.holos++; else if (ob.laser) stats.lasers++; else stats.jets++;
         } else if (ob.type === 'drone') {                       // a track along the ceiling of the floor, the drone starts at one end
           box(ob.t0, ob.t0 + 3, y - 5, y - 5, d, '-'); put(ob.t0 + 3, d, y - 5, 'O'); stats.drones++;   // home (firing) end is the far side; you run under while it is away
+        } else if (ob.type === 'raider') { put(ob.t0, d, y - 1, 'R'); stats.raiders++;
+        } else if (ob.type === 'nest') { put(ob.t0, d, y - 1, 'R'); put(ob.t0 + 2, d, y - 1, 'B'); stats.raiders++; stats.barrels++;
+        } else if (ob.type === 'heavy') { put(ob.t0 + 1, d, y - 1, 'H'); stats.heavies++;
         } else box(ob.t0, e, y - ob.h, y - 1, d, '#');
       }
       stats.floors++; stats.obstacles += obs.length;
@@ -386,7 +401,7 @@
       for (t = 0; t <= R - 1; t++) need.push(t < off ? 2 : (t < s0 + 1 ? 6 : 5));
       if (conn && conn.type === 'spring') for (t = Math.max(0, F - 6); t <= F - 1; t++) need[t] = Math.max(need[t], 6);
       for (i = 0; i < obs.length; i++) {
-        var q = obs[i], n = q.type === 'wall' ? q.h + 3 : (q.type === 'wallspikes' ? q.h + 5 : (q.type === 'ferry' || q.type === 'crown' || q.type === 'fireball' || q.type === 'jet' || q.type === 'drone' ? 6 : 5));
+        var q = obs[i], n = q.type === 'wall' ? q.h + 3 : (q.type === 'wallspikes' ? q.h + 5 : (q.type === 'ferry' || q.type === 'crown' || q.type === 'fireball' || q.type === 'jet' || q.type === 'drone' || q.type === 'heavy' ? 6 : 5));
         for (t = Math.max(0, q.t0 - 3); t <= Math.min(R - 1, q.t0 + q.w + 2); t++) need[t] = Math.max(need[t], n);
       }
 

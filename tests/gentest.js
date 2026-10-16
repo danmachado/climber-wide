@@ -9,6 +9,7 @@ const fs = require('fs');
   const N = +(process.argv[2] || 20);
   const SP = JSON.parse(fs.readFileSync('/home/claude/climber-wide/src/starter-plans.json', 'utf8'));
   const ONE = process.env.ONE ? JSON.parse(process.env.ONE) : null;
+  if (process.env.RING) await p.evaluate((n) => { window.__ringN = +n; }, process.env.RING);
   if (process.env.LAYOUT) await p.evaluate((l) => { window.__layout = l; }, process.env.LAYOUT);
   const out = await p.evaluate(([N, SP, ONE]) => {
     const G = window.__climber; G.manual(true);
@@ -17,7 +18,10 @@ const fs = require('fs');
       G.load(out.room);
       let s = G.state(), frames = 0, where = 'spawn';
       const I = (o) => Object.assign({ x: 0, y: 0, jump: false, dash: false, grab: false }, o);
-      const step = (o) => { const q = I(o); if (window.__rec) window.__rec.push((q.x + 1) + 3 * (q.y + 1) + (q.jump ? 9 : 0) + (q.dash ? 18 : 0) + (q.grab ? 36 : 0)); s = G.step(q, 1); window.__last = s; frames++; window.__frames = frames; if (window.__tr && frames % 15 === 0) window.__tr.push(where.replace('floor ', 'f') + ':' + s.x + ',' + s.y + (s.ground ? 'g' : '')); if (s.won) throw { won: true }; if (s.dead) throw new Error('died at ' + where); return s; };
+      // a slow raider shot about to arrive at chest height: hop it, whatever else the hero was doing (a hit is death anyway)
+      const dodgeNow = () => s && s.ground && s.foeShots && s.foeShots.some(q => !q.big && Math.abs(q.y - (s.y + 3)) < 9 && Math.abs((q.x + 2) - (s.x + 4)) < 36);
+      let dodgeHold = 0;                                                                   // a hop is held for a dozen frames, or it is only a bunny hop under the shot
+      const step = (o) => { const q = I(o); if (!q.jump && !q.dash && dodgeHold === 0 && dodgeNow()) dodgeHold = 12; if (dodgeHold > 0 && !q.dash) { q.jump = true; dodgeHold--; } if (window.__rec) window.__rec.push((q.x + 1) + 3 * (q.y + 1) + (q.jump ? 9 : 0) + (q.dash ? 18 : 0) + (q.grab ? 36 : 0) + (q.shoot ? 72 : 0)); s = G.step(q, 1); window.__last = s; frames++; window.__frames = frames; if (window.__tr) { window.__ring = window.__ring || []; window.__ring.push(where.replace('floor ', 'f') + ':' + s.x + ',' + s.y + (s.ground ? 'g' : '') + (q.jump ? 'J' : '') + (q.shoot ? 'S' : '') + ' shots ' + JSON.stringify(s.foeShots) + ' foes ' + JSON.stringify(s.foes.map(f => [f.x, f.y, f.state]))); if (window.__ring.length > (window.__ringN || 40)) window.__ring.shift(); } if (window.__tr && frames % 15 === 0) window.__tr.push(where.replace('floor ', 'f') + ':' + s.x + ',' + s.y + (s.ground ? 'g' : '')); if (s.won) throw { won: true }; if (s.dead) throw new Error('died at ' + where); return s; };
       const until = (fn, cond, max) => { let k = 0; while (!cond()) { step(fn(k)); if (++k > (max || 600)) throw new Error('stuck at ' + where); } };
       for (let i = 0; i < 40; i++) step({});
       if (out.plan && out.plan.kind === 'islands') return solveIslands(out);
@@ -29,11 +33,51 @@ const fs = require('fs');
         const dist = (t) => d > 0 ? startEdge(t) - lead() : lead() - startEdge(t);
         const past = (t, m) => d > 0 ? trail() >= endEdge(t) + m : trail() <= endEdge(t) - m;
         const mover = (rowY, nearX) => { const ms = s.movers.filter(m => m.y === rowY); if (nearX === undefined) return ms[0]; let best = null; for (const m of ms) if (!best || Math.abs(m.x - nearX) < Math.abs(best.x - nearX)) best = m; return best; };   // a wide floor can hold two ferries: take the one nearest
+        // ---- combat on this floor (CLAUDE.md, Combat) ----
+        // Bad guys on this floor stand on row y - 1 (feet at y * 10). A raider sees 15 tiles and shoots level, slow shots
+        // the hero jumps; the hero's shots carry 19 tiles, so the play is to stand off and fire. A heavy's pellets fly 12
+        // tiles, so he is only ever fired on from 13 or more. Shots stop at solid tiles on the chest row.
+        const tiles = out.room.tiles;
+        const feetOf = (f) => f.y + (f.big ? 24 : 10);
+        const foesHere = () => s.foes.filter(f => f.state !== 'dead' && feetOf(f) === y * 10);
+        const ahead = (f) => d > 0 ? f.x > s.x : f.x + (f.big ? 14 : 8) < s.x + 8;
+        const tilesAway = (f) => Math.abs((f.x + (f.big ? 7 : 4)) - (s.x + 4)) / 10;
+        const chestClear = (f) => { const row = tiles[y - 1]; const a = Math.min(s.x + 4, f.x + 4), b = Math.max(s.x + 4, f.x + 4); for (let px = a; px <= b; px += 10) { const ch = row.charAt(Math.floor(px / 10)); if ('#ICD'.indexOf(ch) >= 0) return false; } return true; };
+        const incoming = () => s.foeShots.some(q => Math.abs(q.y - (s.y + 3)) < 9 && ((d > 0 && q.x > s.x && q.x < s.x + 40) || (d < 0 && q.x < s.x + 8 && q.x > s.x - 32)));   // a slow shot about to arrive: jump it
+        const engage = (wait) => {                                                       // shoot every bad guy on this floor the hero can hit from where he stands
+          const targets = () => foesHere().filter(f => ahead(f) && tilesAway(f) <= 18 && tilesAway(f) >= (f.big ? 14 : 0) && chestClear(f));   // a heavy's pellets fizzle about 13.6 tiles from his centre
+          if (wait && foesHere().some(f => ahead(f) && tilesAway(f) <= 24)) { try { until(() => ({}), () => targets().length > 0, 1000); } catch (e) { if (!/stuck/.test(e.message || '')) throw e; return; } }   // a bad guy on his beat walks into range within a few seconds (a heavy's beat is slow: up to 9 s there and back)
+          if (!targets().length) return;
+          where = where + ' +fight';
+          step({ x: d }); step({});                                                      // face them
+          until(() => ({ shoot: true }), () => !targets().length, 900);                   // step() hops any shot that comes in
+          for (let k = 0; k < 30; k++) step({});                                          // let the last shot land and the dust settle
+          try { until(() => ({}), () => s.ground && dodgeHold === 0 && !s.foeShots.some(q => Math.abs(q.x - s.x) < 80), 300); } catch (e) {}   // and any stray shot pass, feet on the ground, before the next move
+        };
+        const stand = (t) => {                                                           // walk up to tile t and stop; never back up (the last obstacle is behind)
+          const tx = col(t, d) * 10 + 1;
+          if (d > 0 ? s.x <= tx + 4 : s.x >= tx - 4) return;                              // already at the spot or short of it: shoot from here
+          until(() => ({ x: d > 0 ? (s.x > tx + 2 ? -1 : 0) : (s.x < tx - 2 ? 1 : 0) }), () => (d > 0 ? s.x <= tx + 2 : s.x >= tx - 2) && s.ground, 400);
+          for (let k = 0; k < 20 && Math.abs(s.vx) > 0; k++) step({});
+        };
+        const tOf = (px) => { const c = Math.floor(px / 10); return d > 0 ? c - 1 : CW - 2 - c; };   // tile index along this floor's direction
+        let lastEnd = tOf(s.x + 4);                                                        // never back up past where the floor was entered (the way up is behind)
         for (let o of F.obs) {
           if (o.type === 'icespikes') o = { type: 'spikes', t0: o.t0 + o.L, w: o.sw };            // slide along the ice, then it is an ordinary spike jump
           else if (o.type === 'iceblock') o = { type: 'block', t0: o.t0 + o.L, w: 2, h: 2 };
           where = 'floor ' + fi + ' ' + o.type + ' t' + o.t0 + ' w' + o.w;
           const last = o.t0 + o.w - 1;
+          engage();                                                                       // anyone in sight gets shot before the next obstacle
+          if (o.type === 'raider' || o.type === 'nest' || o.type === 'heavy') {
+            const home = o.type === 'heavy' ? o.t0 + 1 : o.t0, K = o.type === 'heavy' ? 19 : 17;   // a heavy halts at the edge of his sight (15 tiles) and fires from there, so stand a step beyond
+            stand(Math.max(lastEnd + 1, home - K));                                       // as far back as the floor allows (a tile clear of the last obstacle), then fire
+            const left = () => foesHere().filter(f => Math.abs((f.x + (f.big ? 7 : 4)) - (col(home, d) * 10 + 5)) <= 45);
+            for (let tries = 0; tries < 4 && left().length; tries++) engage(true);      // a bad guy at the edge of range drifts in and out on his beat: keep at it
+            if (left().length) throw new Error('could not clear ' + where + ' (frame ' + frames + ', hero ' + s.x + ', foe ' + JSON.stringify(left()[0]) + ')');
+            until(() => ({ x: d }), () => past(last, 1), 400);
+            lastEnd = o.t0 + o.w; continue;
+          }
+          lastEnd = o.t0 + o.w;
           if (o.type === 'bridge') {            // never stop on a crumbling bridge
             where = 'floor ' + fi + ' bridge w' + o.w;
             until(() => ({ x: d }), () => past(o.t0 + o.w - 1, 2), 400);
@@ -122,6 +166,7 @@ const fs = require('fs');
             if (o.type === 'block') until(() => ({ x: past(last, 0) ? 0 : d }), () => past(last, 0) && s.ground && s.y + 10 === y * 10, 300);
           }
         }
+        where = 'floor ' + fi + ' end'; engage();
         if (!F.conn) { where = 'floor ' + fi + ' exit'; until(() => ({ x: d }), () => false, 600); }
         const C = F.conn, yN = y - C.Hf;
         where = 'floor ' + fi + ' ' + C.type + ' W' + C.W + ' Hf' + C.Hf;
@@ -249,13 +294,13 @@ const fs = require('fs');
     }
     const res = { total: 0, fail: [], times: {}, demos: {} };
     if (N === 0) { for (let i = 0; i < SP.rooms.length; i++) { res.total++; window.__rec = []; try { const r = solve({ room: SP.rooms[i], plan: SP.plans[i] }); if (!r.ok) res.fail.push([SP.rooms[i].name, r.why]); } catch (e) { if (!e.won) res.fail.push([SP.rooms[i].name, e.message]); else { res.times[SP.rooms[i].id] = +(window.__frames / 60).toFixed(1); const rl = []; for (const c of window.__rec) { if (rl.length && rl[rl.length - 2] === c) rl[rl.length - 1]++; else rl.push(c, 1); } res.demos[SP.rooms[i].id] = rl; } } } window.__rec = null; return res; }
-    if (ONE) { const out = window.generateRoom(ONE.opts, ONE.seed); const tr = []; window.__tr = tr; try { solve(out); } catch (e) { return { total: 1, fail: [[tr.join(' | '), e.message || 'won']] }; } return { total: 1, fail: [] }; }
+    if (ONE) { const out = window.generateRoom(ONE.opts, ONE.seed); const tr = []; window.__tr = tr; try { solve(out); } catch (e) { return { total: 1, fail: [[tr.join(' | ') + '\nLAST FRAMES\n' + (window.__ring || []).join('\n'), e.message || 'won']] }; } return { total: 1, fail: [] }; }
     const styles = ['mixed', 'jump', 'dash', 'climb'];
     const process_layout = (seed, ob) => (window.__layout || 'floors');   // islands are work in progress: LAYOUT=islands to sweep them
     for (let seed = 1; seed <= N; seed++) for (let D = 1; D <= (N === 1 ? 1 : 5); D++) for (const style of styles) for (let ob = 0; ob < 3; ob++) for (let sp = 0; sp < 3; sp++) {
       const el = seed % 4;   // rotate which new pieces are switched on
       const opts = { difficulty: D, obstacles: ob, styles: style === 'mixed' ? [] : (seed % 3 === 0 ? [style, 'jump'] : [style]), spikes: Math.max(1, sp), world: seed % 5 + 1, rows: seed % 7 === 0 ? window.SCREEN.tall : window.SCREEN.rows, layout: process_layout(seed, ob),
-                     elements: { springs: seed % 4 !== 1, gems: true, firepits: seed % 3 !== 1, fireballs: seed % 3 !== 2, spikes: sp > 0, refills: seed % 2 === 0, ice: el === 1 || el === 3, crumble: el === 2 || el === 3, movers: el === 0 || el === 3, zips: seed % 5 !== 2, keys: seed % 3 !== 0, jets: seed % 4 !== 3, lava: seed % 2 === 1, lasers: seed % 3 !== 1, drones: seed % 4 !== 2, wires: seed % 2 === 0, holos: seed % 3 !== 2 } };
+                     elements: { raiders: seed % 3 !== 1, barrels: seed % 2 === 0, heavies: seed % 3 === 0, springs: seed % 4 !== 1, gems: true, firepits: seed % 3 !== 1, fireballs: seed % 3 !== 2, spikes: sp > 0, refills: seed % 2 === 0, ice: el === 1 || el === 3, crumble: el === 2 || el === 3, movers: el === 0 || el === 3, zips: seed % 5 !== 2, keys: seed % 3 !== 0, jets: seed % 4 !== 3, lava: seed % 2 === 1, lasers: seed % 3 !== 1, drones: seed % 4 !== 2, wires: seed % 2 === 0, holos: seed % 3 !== 2 } };
       const out = window.generateRoom(opts, seed * 7919 + D * 31 + ob * 7 + sp);
       res.total++;
       try { const r = solve(out); if (!r.ok) res.fail.push([JSON.stringify(opts), r.why]); }

@@ -3240,7 +3240,7 @@
                keys: roomKeys.map(function (k) { return k.state; }), doors: doors.map(function (d) { return d.open; }),
                jets: jets.map(function (j) { var p = jetPhase(j); return { x: j.x, y: j.y, on: p.on, warn: p.warn, left: p.left }; }), lava: lava ? lava.y : null,
                drones: drones.map(function (d) { return { x: d.x, y: d.y, dir: d.dir, wait: d.wait, fire: d.fire }; }),
-               foes: foes.map(function (f) { return { x: f.x, y: f.y, dir: f.dir, state: f.state, hp: f.hp, big: f.big }; }), barrels: barrels.map(function (b) { return b.state; }), shots: shots.length, foeShots: foeShots.map(function (s) { return { x: s.x, y: s.y }; }) };
+               foes: foes.map(function (f) { return { x: f.x, y: f.y, dir: f.dir, state: f.state, hp: f.hp, big: f.big }; }), barrels: barrels.map(function (b) { return b.state; }), shots: shots.length, foeShots: foeShots.map(function (s) { return { x: s.x, y: s.y, big: s.big }; }) };
     },
     reset: function () { scene = 'play'; mode = 'endless'; resetRun(); }, kill: die,
     view: function () { return { scene: scene, pause: { on: pause.on, pick: pause.pick }, set: { page: set.page, row: set.row, note: set.note }, mode: mode, sel: sel, lvl: lvl, room: room.name, prog: prog, levels: levels.map(function (l) { return l.map(function (r) { return r.name; }); }), result: run.result, time: run.time }; },
