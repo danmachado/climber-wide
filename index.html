@@ -2285,11 +2285,21 @@
     if (hh === RH && chunks.length) return;
     RH = hh; buf.height = RH; buildChunks(); layout();
   }
-  var cam = { y: 0, shown: -1, snap: true };
-  function camTarget() { return RH <= LH ? 0 : Math.max(0, Math.min(RH - LH, Math.round(pl.y + pl.h / 2 - LH / 2 + (pl.vy < -40 ? -24 : 0)))); }
+  // The camera in a tall room (Dan, Oct 2026: the old follow-the-hero camera, with its jump lead, moved all the time and
+  // made him queasy). Now a window camera: the hero's feet may sit anywhere between CAM.top and CAM.bot of the screen
+  // and the view holds still; only when he pushes past either edge does the view slide, just enough to keep him in,
+  // eased at CAM.ease. No lead, no bounce on a jump. On spawn the view centres on him and snaps.
+  var cam = { y: 0, shown: -1, snap: true }, CAM = { top: 0.3, bot: 0.72, ease: 0.12 };
+  function camTarget() {
+    if (RH <= LH) return 0;
+    var feet = pl.y + pl.h, lo = cam.y + LH * CAM.top, hi = cam.y + LH * CAM.bot, t = cam.y;
+    if (cam.snap) t = feet - LH * 0.55;                                   // spawn: the hero a little below the middle, the way up in view
+    else if (feet < lo) t = feet - LH * CAM.top; else if (feet > hi) t = feet - LH * CAM.bot;
+    return Math.max(0, Math.min(RH - LH, Math.round(t)));
+  }
   function applyCam() {
     if (cam.snap) { cam.y = camTarget(); cam.snap = false; }
-    else { var t = camTarget(); cam.y += Math.abs(t - cam.y) < 1 ? t - cam.y : (t - cam.y) * 0.18; }
+    else { var t = camTarget(); cam.y += Math.abs(t - cam.y) < 1 ? t - cam.y : (t - cam.y) * CAM.ease; }
     var shown = Math.round(cam.y * view.scale) / (window.devicePixelRatio || 1);
     if (shown !== cam.shown) { cam.shown = shown; world.style.transform = 'translateY(' + (-shown) + 'px)'; }
     if (para.layers.length) placePara();
@@ -4187,6 +4197,10 @@
       startLevel(0, 0); demo.rec = null; demo.stage = 1; demo.f = 0; demo.t0 = 0; demo.back = false;
       var n = 0; while (!run.won && n < 3000) { step(demoInput()); n++; }
       return this.view();
+    },
+    demoLevel: function (id) {   // tests: play one built-in level's recording as the idle demo, with rendering on (the camera, parallax)
+      for (var i = 0; i < starters.length; i++) if (starters[i].id === id) demo.room = starters[i];
+      scene = 'play'; demo.on = true; demo.rec = DEMOS[id] || null; demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0; demo.stage = 1; demo.f = 0; demo.t0 = 0; demo.back = false; demo.winT = 0; allDirty = true; lastSig = ''; resetRun();
     },
     demoStart: function () { startDemo(); }, demoStep: function (n) { for (var i = 0; i < n; i++) step(demoInput()); return this.state(); },
     chainProbe: function () { // plays room one as a normal run with the demo's inputs, to prove the exit leads to room two
