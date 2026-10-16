@@ -101,7 +101,7 @@
     </div>
     <div class="three">
       <label>World <select id="world"></select></label>
-      <label title="One screen is 48 rows. Two screens is 96 rows and the game scrolls up and down to follow you.">Height <select id="rows"><option value="48">1 screen</option><option value="96">2 screens</option></select></label>
+      <label title="One screen is 27 rows. Two screens is 54 rows and the game scrolls up and down to follow you.">Height <select id="rows"><option value="27">1 screen</option><option value="54">2 screens</option></select></label>
       <label hidden>Level <input type="text" id="level" inputmode="numeric" maxlength="2" placeholder="-"></label>
       <label title="Par time in seconds for the time star. Set from your play test if left empty.">Par s <input type="text" id="par" inputmode="numeric" maxlength="3" placeholder="auto"></label>
     </div>
@@ -224,7 +224,8 @@
 <script>
 (function () {
   'use strict';
-  var COLS = 27, ROWS = 48, T = 10, DRAFT_KEY = 'climberwide.builder.draft.v1';
+/*SHARED_SCREEN*/
+  var COLS = SCREEN.cols, ROWS = SCREEN.rows, T = SCREEN.tile, DRAFT_KEY = 'climberwide.builder.draft.v1';
   var C = { bg: '#0a0d1c', spike: '#e9edf7',
             body: '#ffe9b8', eye: '#0a0d1c', flame: '#ffb74a', teal: '#5fd6b3', tealDim: '#2b6f66' };
   var GROUPS = [
@@ -268,8 +269,8 @@
     var g = [], r, c;
     for (r = 0; r < ROWS; r++) { g.push([]); for (c = 0; c < COLS; c++) g[r].push((r === 0 || r >= ROWS - 2 || c === 0 || c === COLS - 1) ? '#' : '.'); }
     g[ROWS - 3][3] = 'S';
-    g[4][22] = 'E'; g[5][22] = 'E'; g[4][23] = 'E'; g[5][23] = 'E';
-    for (c = 19; c < COLS - 1; c++) g[6][c] = '#';
+    g[4][COLS - 5] = 'E'; g[5][COLS - 5] = 'E'; g[4][COLS - 4] = 'E'; g[5][COLS - 4] = 'E';   // the exit on a ledge at the top right
+    for (c = COLS - 8; c < COLS - 1; c++) g[6][c] = '#';
     return g;
   }
   function slug(s) { return (s || 'room').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'room'; }
@@ -286,7 +287,7 @@
   }
   function fromJSON(d) {
     if (!d || d.format !== 1) throw new Error('This is not a format 1 room file.');
-    if (!d.grid || d.grid.cols !== COLS || (d.grid.rows !== 48 && d.grid.rows !== 96) || d.grid.tile !== T) throw new Error('Room must be ' + COLS + ' tiles wide and 48 or 96 tall, at ' + T + ' px.');
+    if (!d.grid || d.grid.cols !== COLS || (d.grid.rows !== SCREEN.rows && d.grid.rows !== SCREEN.tall) || d.grid.tile !== T) throw new Error('Room must be ' + COLS + ' tiles wide and ' + SCREEN.rows + ' or ' + SCREEN.tall + ' tall, at ' + T + ' px.');
     if (!d.tiles || d.tiles.length !== d.grid.rows) throw new Error('Room has the wrong number of rows.');
     ROWS = d.grid.rows;
     var g = d.tiles.map(function (row, r) {
@@ -385,7 +386,7 @@
     var key = [COLS, ROWS, room.world | 0, room.level | 0, room.name || ''].join('|');
     if (key !== sky.key) {
       sky.key = key; sky.cv = document.createElement('canvas'); sky.cv.width = COLS * T; sky.cv.height = ROWS * T;
-      drawSky(sky.cv.getContext('2d'), COLS * T, ROWS * T, 480, skyHash((room.name || '') + '/' + (room.world | 0) + '/' + (room.level | 0)));
+      drawSky(sky.cv.getContext('2d'), COLS * T, ROWS * T, SCREEN.h, skyHash((room.name || '') + '/' + (room.world | 0) + '/' + (room.level | 0)));
     }
     return sky.cv;
   }
@@ -655,7 +656,7 @@
       for (c = 0; c < COLS; c++) tiles[0][c] = '#';
     }
     ROWS = want;
-    changed(); fit(); say('Room is now ' + (want / 48) + (want > 48 ? ' screens' : ' screen') + ' tall. Undo brings the old height back.');
+    changed(); fit(); say('Room is now ' + (want / SCREEN.rows) + (want > SCREEN.rows ? ' screens' : ' screen') + ' tall. Undo brings the old height back.');
   });
   $('world').addEventListener('change', function () { room.world = +this.value; syncMeta(); saveDraft(); refresh(); mapWorld = room.world; renderSlots(); });
   $('level').addEventListener('input', function () { room.level = Math.max(0, parseInt(this.value, 10) || 0); saveDraft(); renderSlots(); });

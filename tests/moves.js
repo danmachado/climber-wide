@@ -2,15 +2,15 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
   await p.goto('file:///home/claude/climber-wide/index.html'); await p.waitForTimeout(300);
   const out = await p.evaluate(() => {
     const G = window.__climber; G.manual(true);
-    const rows = []; for (let r = 0; r < 48; r++) { let s = ''; for (let c = 0; c < 27; c++) s += (r === 0 || r >= 46 || c === 0 || c === 26) ? '#' : (c === 13 && r >= 20 ? '#' : '.'); rows.push(s); }
-    rows[45] = rows[45].substring(0, 8) + 'S' + rows[45].substring(9); rows[4] = rows[4].substring(0, 24) + 'E' + rows[4].substring(25);
-    const room = { format: 1, id: 't', name: 'Moves', difficulty: 1, grid: { cols: 27, rows: 48, tile: 10 }, tiles: rows, entities: [] };
+    const rows = []; for (let r = 0; r < 27; r++) { let s = ''; for (let c = 0; c < 48; c++) s += (r === 0 || r >= 25 || c === 0 || c === 47) ? '#' : (c === 13 && r >= 4 ? '#' : '.'); rows.push(s); }   // wide: 48 x 27, a wall at col 13 from row 4 down
+    rows[24] = rows[24].substring(0, 8) + 'S' + rows[24].substring(9); rows[2] = rows[2].substring(0, 45) + 'E' + rows[2].substring(46);
+    const room = { format: 1, id: 't', name: 'Moves', difficulty: 1, grid: { cols: 48, rows: 27, tile: 10 }, tiles: rows, entities: [] };
     const I = (o) => Object.assign({ x: 0, y: 0, jump: false, dash: false, grab: false }, o);
     const fresh = () => { G.load(room); for (let i = 0; i < 40; i++) G.step(I({}), 1); for (let i = 0; i < 60; i++) G.step(I({ x: 1 }), 1); return G.state(); };   // run up against the wall at col 13
     const hung = () => { let s = fresh(); for (let i = 0; i < 40; i++) s = G.step(I({ x: 1, y: -1, grab: true }), 1); for (let i = 0; i < 3; i++) s = G.step(I({ x: 1 }), 1); return s; };   // climb a bit, let go, falling beside the wall
@@ -38,18 +38,18 @@ const { chromium } = require('playwright');
     R.hyper = { vx: Math.round(s.vx), vy: Math.round(s.vy) };
     // 6 mantle: climb a one-tile post from either side holding up and toward it; the hero pulls up and stands on the post
     R.mantle = [1, -1].map(dir => {
-      const rows = []; for (let r = 0; r < 48; r++) { let t = ''; for (let c = 0; c < 27; c++) t += (r === 0 || r >= 46 || c === 0 || c === 26) ? '#' : (c === 13 && r >= 38 ? '#' : '.'); rows.push(t); }
-      const sc = dir > 0 ? 6 : 20; rows[45] = rows[45].substring(0, sc) + 'S' + rows[45].substring(sc + 1); rows[4] = rows[4].substring(0, 24) + 'E' + rows[4].substring(25);
+      const rows = []; for (let r = 0; r < 27; r++) { let t = ''; for (let c = 0; c < 48; c++) t += (r === 0 || r >= 25 || c === 0 || c === 47) ? '#' : (c === 13 && r >= 17 ? '#' : '.'); rows.push(t); }
+      const sc = dir > 0 ? 6 : 20; rows[24] = rows[24].substring(0, sc) + 'S' + rows[24].substring(sc + 1); rows[2] = rows[2].substring(0, 45) + 'E' + rows[2].substring(46);
       G.load(Object.assign({}, room, { tiles: rows })); let m;
       for (let i = 0; i < 40; i++) G.step(I({}), 1); for (let i = 0; i < 80; i++) G.step(I({ x: dir }), 1);
-      for (let i = 0; i < 200; i++) { m = G.step(I({ x: dir, y: -1, grab: true }), 1); if (m.ground && m.y < 380) break; }
+      for (let i = 0; i < 200; i++) { m = G.step(I({ x: dir, y: -1, grab: true }), 1); if (m.ground && m.y < 170) break; }
       for (let i = 0; i < 10; i++) m = G.step(I({}), 1);
       return { x: m.x, y: m.y, ground: m.ground, dead: m.dead };
     });
     return R;
   });
   console.log(JSON.stringify(out));
-  const ok = out.slide[0] < 40 && out.slide[1] > 60 && out.neutral.backTowardWall && out.directional.stillPushedAway && out.bounce.vy <= -190 && out.bounce.vx <= -200 && out.refund.afterJump < out.refund.before && out.refund.afterPushAway >= out.refund.before - 1 && out.superDash.vx >= 300 && out.superDash.vy <= -120 && out.hyper.vx >= 380 && out.hyper.vy > out.superDash.vy && out.mantle.every(m => m.ground && !m.dead && m.y === 370 && m.x >= 130 && m.x <= 132);
+  const ok = out.slide[0] < 40 && out.slide[1] > 60 && out.neutral.backTowardWall && out.directional.stillPushedAway && out.bounce.vy <= -190 && out.bounce.vx <= -200 && out.refund.afterJump < out.refund.before && out.refund.afterPushAway >= out.refund.before - 1 && out.superDash.vx >= 300 && out.superDash.vy <= -120 && out.hyper.vx >= 380 && out.hyper.vy > out.superDash.vy && out.mantle.every(m => m.ground && !m.dead && m.y === 160 && m.x >= 130 && m.x <= 132);
   console.log('all good:', ok, 'errors', JSON.stringify(errs));
   await b.close();
 })();

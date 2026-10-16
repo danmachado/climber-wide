@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const rows = {};
   for (const theme of ['original', 'gb']) {
-    const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+    const p = await b.newPage({ viewport: { width: 960, height: 540 } });
     await p.route('**/rest/v1/**', r => r.abort());
     await p.goto('file:///home/claude/climber-wide/index.html#unlock');
     await p.evaluate(t => localStorage.setItem('climberwide.theme.v1', t), theme); await p.reload(); await p.waitForTimeout(800);

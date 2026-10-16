@@ -26,7 +26,8 @@
 (function () {
   'use strict';
 
-  var LW = 270, LH = 480, STEP = 1 / 60;   // the screen; a room is LW wide and one or two screens tall (RH)
+/*SHARED_SCREEN*/
+  var LW = SCREEN.w, LH = SCREEN.h, MX = LW / 2, STEP = 1 / 60;   // the screen (shared-screen.js); a room is LW wide and one or two screens tall (RH)
   var RH = LH;
   var K = 1.25; // tiles are 10px, so classic 8px-tile platformer speeds are scaled up by 10/8
 
@@ -677,12 +678,12 @@
   function pauseButtons() {
     return [['RESUME', resumePlay], ['RESTART', function () { pause.on = false; if (mode === 'map') startLevel(lvl.w, lvl.i); else startEndless(); }],
             ['MAP', function () { pause.on = false; if (mode === 'map') { sel.w = lvl.w; sel.i = lvl.i; } toMap(); }],
-            ['MAIN MENU', function () { pause.on = false; toMenu(); }]];
+            ['MENU', function () { pause.on = false; toMenu(); }]];
   }
   function openPause() { pause.on = true; pause.pick = 0; }
   function resumePlay() { pause.on = false; pl.prevJump = pl.prevDash = true; }      // the press that chose RESUME is not a jump
   function pauseInput(inp, p) {
-    var dy = inp.y && !p.y ? inp.y : 0, n = pauseButtons().length;
+    var dy = inp.y && !p.y ? inp.y : (inp.x && !p.x ? inp.x : 0), n = pauseButtons().length;   // the buttons are one row: left and right, or up and down
     if (dy) pause.pick = (pause.pick + dy + n) % n;
     if (inp.back && !p.back || inp.dash && !p.dash) { resumePlay(); return; }      // Start, Esc or dash again: straight back in
     if (inp.jump && !p.jump) pauseButtons()[pause.pick][1]();
@@ -834,8 +835,8 @@
 
     if (run.won) {
       if (staged()) {                              // the level clear panel: up and down choose a button, jump presses it
-        var rs = run.result, dy = inp.y && !rs.py ? inp.y : 0, n = clearButtons().length;
-        rs.py = inp.y;
+        var rs = run.result, dy = inp.y && !rs.py ? inp.y : (inp.x && !rs.px ? inp.x : 0), n = clearButtons().length;   // one row of buttons: left and right, or up and down
+        rs.py = inp.y; rs.px = inp.x;
         if (dy) rs.pick = (rs.pick + dy + n) % n;
         if (jumpPressed) clearButtons()[rs.pick][1]();
       }
@@ -1174,11 +1175,12 @@
   // A code is x+1 + 3(y+1) + 9 jump + 18 dash + 36 grab + 72 shoot.
   var DEMOS = /*DEMOS*/;
   function pickDemo() {
-    var list = [starters[0]], i;
-    for (i = 1; i < starters.length; i++) if (DEMOS[starters[i].id]) list.push(starters[i]);
+    var list = [], i;
+    for (i = 0; i < starters.length; i++) if (DEMOS[starters[i].id]) list.push(starters[i]);   // wide: every level has a recorded run (no scripted 1-1 yet)
+    if (!list.length) list.push(starters[0]);
     if (list.length > 1 && demo.room) list.splice(list.indexOf(demo.room), 1);      // never the same level twice in a row
     demo.room = list[Math.floor(Math.random() * list.length)];
-    demo.rec = demo.room === starters[0] ? null : DEMOS[demo.room.id]; demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0;
+    demo.rec = DEMOS[demo.room.id] || null; demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0;
   }
   function foeOn(feet, big) { for (var i = 0; i < foes.length; i++) { var f = foes[i]; if (f.state !== 'dead' && !!f.big === big && f.y + f.h === feet) return f; } return null; }
   function foeAhead() {
@@ -1192,7 +1194,7 @@
     function next() { demo.stage++; demo.t0 = demo.f; }
     if (run.won) { if (++demo.winT > 100) startDemo(); return inp; }
     if (demo.rec) {                                // a recorded run: play the next input, move on if it ever goes wrong
-      if (pl.dead || demo.rk >= demo.rec.length) { startDemo(); return inp; }
+      if (pl.dead || demo.rk >= demo.rec.length) { if (demo.on) startDemo(); return inp; }   // a recording replayed as a real run (chainProbe) just stops
       var code = demo.rec[demo.rk];
       if (--demo.rleft <= 0) { demo.rk += 2; demo.rleft = demo.rec[demo.rk + 1] || 0; }
       inp.x = code % 3 - 1; inp.y = Math.floor(code / 3) % 3 - 1; inp.jump = !!(Math.floor(code / 9) % 2); inp.dash = !!(Math.floor(code / 18) % 2); inp.grab = !!(Math.floor(code / 36) % 2); inp.shoot = code >= 72;
@@ -1267,7 +1269,7 @@
   // ---- drawing ----
   var stage = document.getElementById('stage');
   // The frame can only repaint a small part of its 4K screen at full speed. So the picture is drawn to a hidden
-  // 270 x 480 buffer, and the screen is covered by a grid of small canvases. Each frame only the pieces that
+  // LW x LH buffer, and the screen is covered by a grid of small canvases. Each frame only the pieces that
   // actually changed (around the character and effects) are copied across; the rest of the screen is left alone.
   function makeCanvas(w, h, onStage) {
     var c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -1281,7 +1283,7 @@
     h.gbBand = 'ui';
     document.body.style.background = GB.kind === 'bw' ? GB_HEX[0] : GB_HEX[3]; stage.style.background = GB_HEX[0];   // BLACK AND WHITE: black all round
   }
-  var CW = 45, CH = 48, chunks = [], dirtyNow = [], dirtyPrev = [], allDirty = true, chunkCopies = 0;   // chunkCopies: a running count, for measuring what an effect costs
+  var CW = 48, CH = 45, chunks = [], dirtyNow = [], dirtyPrev = [], allDirty = true, chunkCopies = 0;   // chunkCopies: a running count, for measuring what an effect costs
   // The chunks live in a "world" layer as tall as the room. A tall room scrolls by sliding that layer with a
   // transform (no repainting), the same cheap move the screen shake uses.
   var world = document.createElement('div'); world.id = 'world'; stage.appendChild(world);
@@ -1345,7 +1347,7 @@
     if (shown !== cam.shown) { cam.shown = shown; world.style.transform = 'translateY(' + (-shown) + 'px)'; }
   }
   var TOP_H = 30, BOT_H = 0; // HUD strips, in game pixels. The top bar is 17 deep at the sides and 28 in the middle (HB), the rest is transparent.
-  var HB = { side: 17, deep: 28, cl: 92, cr: 178, ch: 8 };   // the top bar's outline: the middle panel runs cl to cr and drops to deep with ch-wide chamfers
+  var HB = { side: 17, deep: 28, cl: MX - 43, cr: MX + 43, ch: 8 };   // the top bar's outline: the middle panel runs cl to cr and drops to deep with ch-wide chamfers
   var hudTop = makeCanvas(1, 1, true), hudBot = makeCanvas(1, 1, true), hudMid = makeCanvas(1, 1, true);
   var tctx = hudTop.getContext('2d'), bctx = hudBot.getContext('2d'), mctx = hudMid.getContext('2d');
   function mark(x, y, w, hh) { dirtyNow.push([x, y, w, hh]); }
@@ -1389,7 +1391,7 @@
     var cssW = LW * s / dpr;
     stage.style.width = cssW + 'px';
     stage.style.height = (LH * s / dpr) + 'px';
-    var bw = Math.max(270, Math.min(Math.round(cssW * dpr), 1080));
+    var bw = Math.max(LW, Math.min(Math.round(cssW * dpr), LW * 4));
     hud.width = bw; hud.height = Math.round(bw * LH / LW);
     var u = bw / LW, i, px = function (v) { return Math.round(v * s) / dpr; };
     world.style.height = px(RH) + 'px'; cam.shown = -1;
@@ -2426,7 +2428,7 @@
     // panel seams and grille marks, very faint
     h.globalAlpha = 0.09;
     hudBox(u, L0 - K - 1, 2, 1, S - 3, '#ffffff'); hudBox(u, R0 + K, 2, 1, S - 3, '#ffffff');
-    for (i = 0; i < 4; i++) { hudBox(u, 228 - 16 + i * 3, 3 + 0, 1, 1, '#ffffff'); }
+    for (i = 0; i < 4; i++) { hudBox(u, LW - 58 + i * 3, 3 + 0, 1, 1, '#ffffff'); }
     for (i = 0; i < 5; i++) hudPoly(u, [[R0 + K + 4 + i * 3, S - 2], [R0 + K + 6 + i * 3, S - 5]], null, '#ffffff', 0.8);
     for (i = 0; i < 5; i++) hudPoly(u, [[L0 - K - 6 - i * 3, S - 2], [L0 - K - 4 - i * 3, S - 5]], null, '#ffffff', 0.8);
     h.globalAlpha = 1;
@@ -2434,7 +2436,7 @@
     hudPoly(u, [[0, S - 0.5], [L0 - K, S - 0.5], [L0, D - 0.5], [R0, D - 0.5], [R0 + K, S - 0.5], [LW, S - 0.5]], null, EDGE, 1);
     hudPoly(u, [[L0 + 2, D + 0.6], [R0 - 2, D + 0.6]], null, th.accent, 1.2);
     hudPoly(u, [[L0 - K + 1, S + 0.6], [L0 + 1.5, D + 0.6]], null, th.accentLo, 0.8); hudPoly(u, [[R0 + K - 1, S + 0.6], [R0 - 1.5, D + 0.6]], null, th.accentLo, 0.8);
-    if (check === 1) { t(fps.secs < 2 ? 'measuring' : fps.now + ' FPS  LOW ' + fps.low + '  GAME ' + fps.ms + ' MS' + (city ? (cityOn ? '  CITY ' + Math.max(0, fps.city) : '  CITY OFF') : ''), 135, 10.5, 7, C.flame, 'center'); return; }
+    if (check === 1) { t(fps.secs < 2 ? 'measuring' : fps.now + ' FPS  LOW ' + fps.low + '  GAME ' + fps.ms + ' MS' + (city ? (cityOn ? '  CITY ' + Math.max(0, fps.city) : '  CITY OFF') : ''), MX, 10.5, 7, C.flame, 'center'); return; }
 
     // Every item on the top row sits in one band, y 3 to 14: boxes are 11 tall, text 7 tall at y 5, so the space above
     // the row and below it to the pale edge (at S) is the same, and the room name is centred in the middle panel below.
@@ -2448,10 +2450,10 @@
     hudBox(u, 12.5 + P.dashCost / P.stamina * 50, 1, 1, 2, EDGE);
     // middle: the clock, big. White, red once it passes par.
     var par = mode === 'map' && !testMode && !demo.on ? parOf(room) : 0, late = par && run.time > par, cs = clock(run.time), csc = cs.length <= 4 ? 3 : 2.4;
-    pxText(cs, 135, (D - 0.5 - 7 * csc) / 2, csc, late ? C.hurt : C.text, 'center');
+    pxText(cs, MX, (D - 0.5 - 7 * csc) / 2, csc, late ? C.hurt : C.text, 'center');
 
     // right: the level tag as a key cap at the edge, and before it the stars you would earn if you finished now
-    var tag = testMode ? 'TEST' : demo.on ? 'DEMO' : mode === 'map' ? (lvl.w + 1) + '-' + (lvl.i + 1) : String(run.count), tw = tag.length * 6 + 5, tx = 267 - tw;
+    var tag = testMode ? 'TEST' : demo.on ? 'DEMO' : mode === 'map' ? (lvl.w + 1) + '-' + (lvl.i + 1) : String(run.count), tw = tag.length * 6 + 5, tx = LW - 3 - tw;
     hudRound(u, tx, 3, tw, 11, 1.5, EDGE); hudRound(u, tx + 1, 4, tw - 2, 9, 1, '#1a2140');
     pxText(tag, tx + 3, 5, 1, th.accent, 'left');
     if (!par) return;
@@ -2479,10 +2481,10 @@
     else if (run.won && run.result) {
       drawClear(u);
     } else if (run.won) {
-      h.fillStyle = 'rgba(11,16,32,0.86)'; h.fillRect(30 * u, 190 * u, 210 * u, 90 * u);
-      t('ROOM CLEAR', 135, 222, 18, C.teal, 'center');
-      t(clock(run.time) + '   ' + run.deaths + (run.deaths === 1 ? ' fall' : ' falls'), 135, 244, 10, C.text, 'center');
-      t(demo.on ? 'Another level in a moment' : 'Press jump to play again', 135, 264, 7, C.dim, 'center');
+      h.fillStyle = 'rgba(11,16,32,0.86)'; h.fillRect((MX - 105) * u, 90 * u, 210 * u, 90 * u);
+      t('ROOM CLEAR', MX, 122, 18, C.teal, 'center');
+      t(clock(run.time) + '   ' + run.deaths + (run.deaths === 1 ? ' fall' : ' falls'), MX, 144, 10, C.text, 'center');
+      t(demo.on ? 'Another level in a moment' : 'Press jump to play again', MX, 164, 7, C.dim, 'center');
     }
   }
 
@@ -2542,56 +2544,56 @@
       h.fillRect(ax, ay, Math.round((x + (c + 1) * sc) * u) - ax, Math.round((y + (r + 1) * sc) * u) - ay);
     }
   }
-  // The pause panel: the clear panel's look (accent card, hard shadow, dark buttons) over the frozen room.
+  // The pause panel: the clear panel's look (accent card, hard shadow, dark buttons) over the frozen room. Landscape:
+  // the card is wide and the buttons sit in one row (left and right move along them, up and down too).
+  function panelButtons(box, btns, pick, top, th, INK, cw) {   // a row of buttons centred on MX, cw wide each; returns nothing, fills hits
+    var n = btns.length, gap = 8, w0 = n * cw + (n - 1) * gap, x0 = MX - w0 / 2, i;
+    for (i = 0; i < n; i++) {
+      var bx = x0 + i * (cw + gap), on = i === pick;
+      box(bx, top, cw, 26, INK);
+      if (!on) { box(bx + 2, top + 2, cw - 4, 20, th.accent); box(bx + 2, top + 22, cw - 4, 2, th.accentLo); }
+      pxText(btns[i][0], bx + cw / 2, top + 6, btns[i][0].length * 12 - 2 > cw - 16 ? 1 : 2, on ? th.accent : INK, 'center');
+      if (on) { box(bx + 6, top + 10, 6, 6, th.accent); box(bx + cw - 12, top + 10, 6, 6, th.accent); }
+      hits.push({ x: bx, y: top, w: cw, h: 26, fn: btns[i][1] });
+    }
+  }
   function drawPause(u) {
-    var th = themeOf(room), INK = '#101426', btns = pauseButtons(), top = 108, hh = 112 + btns.length * 32, i;
+    var th = themeOf(room), INK = '#101426', btns = pauseButtons(), top = 48, cw = 440, hh = 134;
     function box(x, y, w, hgt, color) { h.fillStyle = color; h.fillRect(Math.round(x * u), Math.round(y * u), Math.round((x + w) * u) - Math.round(x * u), Math.round((y + hgt) * u) - Math.round(y * u)); }
-    function dots(y) { for (var x = 51; x < 220; x += 6) box(x, y, 3, 2, INK); }
+    function dots(y) { for (var x = MX - cw / 2 + 16; x < MX + cw / 2 - 14; x += 6) box(x, y, 3, 2, INK); }
     hits = [];
     box(0, 0, LW, LH, 'rgba(7,9,20,0.72)');
-    box(35, top + 5, 200, hh, INK);
-    box(35, top, 200, hh, th.accent);
+    box(MX - cw / 2, top + 5, cw, hh, INK);
+    box(MX - cw / 2, top, cw, hh, th.accent);
     var where = mode === 'map' ? 'LEVEL ' + (lvl.w + 1) + '-' + (lvl.i + 1) : 'ENDLESS  ROOM ' + run.count;
-    pxText(where, 135, top + 14, 1, INK, 'center');
-    pxText((room.name || '').toUpperCase().replace(/[^A-Z0-9 .:\/-]/g, '').substring(0, 30), 135, top + 26, 1, INK, 'center');
-    pxText('PAUSED', 135, top + 42, 4, INK, 'center');
-    dots(top + 78);
-    pxText('TIME ' + run.time.toFixed(1) + '   FALLS ' + run.deaths, 135, top + 88, 1, INK, 'center');
-    for (i = 0; i < btns.length; i++) {
-      var by = top + 104 + i * 32, on = i === pause.pick;
-      box(55, by, 160, 26, INK);
-      if (!on) { box(57, by + 2, 156, 20, th.accent); box(57, by + 22, 156, 2, th.accentLo); }
-      pxText(btns[i][0], 135, by + 6, 2, on ? th.accent : INK, 'center');
-      if (on) { box(63, by + 10, 6, 6, th.accent); box(201, by + 10, 6, 6, th.accent); }
-      hits.push({ x: 55, y: by, w: 160, h: 26, fn: btns[i][1] });
-    }
-    pxText(usedPad ? 'START OR DASH RESUMES' : 'ESC OR X RESUMES', 135, top + hh + 14, 1, C.text, 'center');
+    pxText(where, MX, top + 10, 1, INK, 'center');
+    pxText((room.name || '').toUpperCase().replace(/[^A-Z0-9 .:\/-]/g, '').substring(0, 30), MX, top + 21, 1, INK, 'center');
+    pxText('PAUSED', MX, top + 34, 4, INK, 'center');
+    dots(top + 68);
+    pxText('TIME ' + run.time.toFixed(1) + '   FALLS ' + run.deaths, MX, top + 76, 1, INK, 'center');
+    panelButtons(box, btns, pause.pick, top + 94, th, INK, 100);
+    pxText(usedPad ? 'START OR DASH RESUMES' : 'ESC OR X RESUMES', MX, top + hh + 12, 1, C.text, 'center');
   }
   function drawClear(u) {
-    var rs = run.result, th = themeOf(room), INK = '#101426', btns = rs.demo ? [] : clearButtons(), top = rs.demo ? 130 : 92, hh = rs.demo ? 214 : 194 + btns.length * 32, i;
+    var rs = run.result, th = themeOf(room), INK = '#101426', btns = rs.demo ? [] : clearButtons(), top = 22, cw = 380, hh = rs.demo ? 170 : 196, i;
     function box(x, y, w, hgt, color) { h.fillStyle = color; h.fillRect(Math.round(x * u), Math.round(y * u), Math.round((x + w) * u) - Math.round(x * u), Math.round((y + hgt) * u) - Math.round(y * u)); }
-    function dots(y) { for (var x = 51; x < 220; x += 6) box(x, y, 3, 2, INK); }
+    function dots(y) { for (var x = MX - cw / 2 + 16; x < MX + cw / 2 - 14; x += 6) box(x, y, 3, 2, INK); }
     hits = [];
     box(0, 0, LW, LH, 'rgba(7,9,20,0.72)');
-    box(35, top + 5, 200, hh, INK);                                            // hard shadow
-    box(35, top, 200, hh, th.accent);
-    pxText(rs.demo ? (room.level > 0 ? 'LEVEL ' + worldOf(room) + '-' + room.level : 'LEVEL') : 'LEVEL ' + (lvl.w + 1) + '-' + (lvl.i + 1), 135, top + 14, 2, INK, 'center');
-    if (rs.demo) { dots(top + 184); pxText('DEMO - PRESS ANY BUTTON', 135, top + 194, 1, INK, 'center'); }
-    pxText('CLEAR', 135, top + 36, 5, INK, 'center');
-    dots(top + 80);
-    var ns = rs.gems ? 4 : 3, sx0 = 135 - (ns * 39 + (ns - 1) * 9) / 2;
-    for (i = 0; i < ns; i++) pxStar(sx0 + i * 48, top + 90, 3, INK, i < rs.stars ? INK : null);
-    dots(top + 136);
+    box(MX - cw / 2, top + 5, cw, hh, INK);                                            // hard shadow
+    box(MX - cw / 2, top, cw, hh, th.accent);
+    pxText(rs.demo ? (room.level > 0 ? 'LEVEL ' + worldOf(room) + '-' + room.level : 'LEVEL') : 'LEVEL ' + (lvl.w + 1) + '-' + (lvl.i + 1), MX, top + 10, 2, INK, 'center');
+    pxText('CLEAR', MX, top + 28, 5, INK, 'center');
+    dots(top + 68);
+    // stars on the left, the numbers on the right, one band
+    var ns = rs.gems ? 4 : 3, sx0 = MX - 170;
+    for (i = 0; i < ns; i++) pxStar(sx0 + i * 40, top + 78, 2.5, INK, i < rs.stars ? INK : null);
     var cols = [['TIME', run.time.toFixed(1)], ['PAR', rs.par.toFixed(1)], ['FALLS', String(run.deaths)]];
-    for (i = 0; i < 3; i++) { pxText(cols[i][0], 75 + i * 60, top + 146, 1, INK, 'center'); pxText(cols[i][1], 75 + i * 60, top + 158, 2, INK, 'center'); }
-    for (i = 0; i < btns.length; i++) {
-      var by = top + 186 + i * 32, on = i === rs.pick;
-      box(55, by, 160, 26, INK);
-      if (!on) { box(57, by + 2, 156, 20, th.accent); box(57, by + 22, 156, 2, th.accentLo); }
-      pxText(btns[i][0], 135, by + 6, 2, on ? th.accent : INK, 'center');
-      if (on) { box(63, by + 10, 6, 6, th.accent); box(201, by + 10, 6, 6, th.accent); }
-      hits.push({ x: 55, y: by, w: 160, h: 26, fn: btns[i][1] });
-    }
+    for (i = 0; i < 3; i++) { pxText(cols[i][0], MX + 50 + i * 54, top + 80, 1, INK, 'center'); pxText(cols[i][1], MX + 50 + i * 54, top + 92, 2, INK, 'center'); }
+    dots(top + 118);
+    if (rs.demo) { pxText('DEMO - PRESS ANY BUTTON', MX, top + 132, 1, INK, 'center'); return; }
+    panelButtons(box, btns, rs.pick, top + 130, th, INK, 112);
+    pxText(usedPad ? 'LEFT AND RIGHT CHOOSE - JUMP PICKS' : 'ARROWS CHOOSE - C PICKS', MX, top + hh + 12, 1, C.text, 'center');
   }
   function star(b, u, cx, cy, rad, color) {
     b.fillStyle = color; b.beginPath();
@@ -2660,26 +2662,26 @@
   }
   function drawMenu(u, box) {
     var INK = '#101426', i, k;
-    drawLogo(box, 135, 146, 4);
-    for (i = 0; i < MENU_BIG; i++) {
-      var on = i === sel.menu, y = 206 + i * 52;
-      keyButton(box, 35, y, 200, 42, on);
-      pxText(MENU[i][0], 135, y + 10, 3, on ? INK : C.dim, 'center');
-      hits.push({ x: 35, y: y, w: 200, h: 42, fn: (function (kk) { return function () { sel.menu = kk; MENU[kk][2](); }; })(i) });
+    drawLogo(box, MX, 14, 4);                                        // 7 rows x 4 = 36 tall, ends at 50
+    for (i = 0; i < MENU_BIG; i++) {                                 // MAP and ENDLESS side by side
+      var on = i === sel.menu, x = MX - 205 + i * 210, y = 72;
+      keyButton(box, x, y, 200, 42, on);
+      pxText(MENU[i][0], x + 100, y + 10, 3, on ? INK : C.dim, 'center');
+      hits.push({ x: x, y: y, w: 200, h: 42, fn: (function (kk) { return function () { sel.menu = kk; MENU[kk][2](); }; })(i) });
     }
     var n = MENU.length - MENU_BIG;
-    for (i = 0; i < n; i++) {
-      var mi = MENU_BIG + i, on2 = mi === sel.menu, cx = 135 + (i - (n - 1) / 2) * 50, x0 = cx - 20, y0 = 324, ic = MENU_ICONS[MENU[mi][0]];
+    for (i = 0; i < n; i++) {                                        // the small icon buttons in a row under them
+      var mi = MENU_BIG + i, on2 = mi === sel.menu, cx = MX + (i - (n - 1) / 2) * 50, x0 = cx - 20, y0 = 130, ic = MENU_ICONS[MENU[mi][0]];
       keyButton(box, x0, y0, 40, 40, on2);
       if (ic) { var iw = ic[0].length, ih = ic.length, ix = cx - iw, iy = y0 + 19 - ih;   // centred, nudged up a pixel for the shaded bottom band
         for (var r = 0; r < ih; r++) for (k = 0; k < iw; k++) if (ic[r].charAt(k) === '#') box(ix + k * 2, iy + r * 2, 2, 2, on2 ? INK : C.dim); }
       hits.push({ x: x0, y: y0, w: 40, h: 40, fn: (function (kk) { return function () { sel.menu = kk; MENU[kk][2](); }; })(mi) });
     }
     // what the chosen button does; a note from reload or exit takes its place
-    var lines = wrapText(hudClean(menuNote || MENU[sel.menu][1]), 40), ly = 384;
-    if (!menuNote && sel.menu >= MENU_BIG) { pxText(MENU[sel.menu][0], 135, ly, 1, C.flame, 'center'); ly += 12; }
-    for (i = 0; i < lines.length; i++) pxText(lines[i], 135, ly + i * 11, 1, menuNote ? C.flame : C.text, 'center');
-    pxText(usedPad ? 'ARROWS CHOOSE - JUMP STARTS' : 'ARROWS CHOOSE - C STARTS - OR CLICK', 135, 462, 1, '#5a6590', 'center');
+    var lines = wrapText(hudClean(menuNote || MENU[sel.menu][1]), 44), ly = 190;
+    if (!menuNote && sel.menu >= MENU_BIG) { pxText(MENU[sel.menu][0], MX, ly, 1, C.flame, 'center'); ly += 12; }
+    for (i = 0; i < lines.length; i++) pxText(lines[i], MX, ly + i * 11, 1, menuNote ? C.flame : C.text, 'center');
+    pxText(usedPad ? 'ARROWS CHOOSE - JUMP STARTS' : 'ARROWS CHOOSE - C STARTS - OR CLICK', MX, 256, 1, '#5a6590', 'center');
   }
   // Reload asks the server for a fresh copy first, so a new build shows up without clearing anything by hand.
   function reloadGame() {
@@ -2777,10 +2779,11 @@
       return;
     }
   }
-  // The controller picture, centred at x 135, scaled by sc about its middle. lit: button name -> colour.
+  // The controller picture, centred at px, cy and scaled by sc about that point. lit: button name -> colour.
   // Returns pt(name): where that button sits on screen in game pixels, for callout lines ('dpad' for the whole pad).
-  function drawPad(u, cy, lit, sc) {
-    var BODY = '#222c57', EDGE = '#4a5a9e', KEY = '#0e1429';
+  // The shapes are laid out about x 135 (the old portrait centre) and moved by ox.
+  function drawPad(u, px, cy, lit, sc) {
+    var BODY = '#222c57', EDGE = '#4a5a9e', KEY = '#0e1429', ox = px - 135;
     sc = sc || 1;
     function rr(x, y, w, hh, r, fill) {
       h.fillStyle = fill; h.beginPath();
@@ -2793,7 +2796,7 @@
               up: [79.5, cy - 21.5, 9, 9], down: [79.5, cy - 3.5, 9, 9], left: [70.5, cy - 12.5, 9, 9], right: [88.5, cy - 12.5, 9, 9],
               fb: [186, cy + 3, 5.5], ft: [186, cy - 19, 5.5], fl: [175, cy - 8, 5.5], fr: [197, cy - 8, 5.5], select: [122, cy - 16, 3.2], start: [148, cy - 16, 3.2] };
     function key(n, base) { var b = B[n], f = (lit && lit[n]) || base; if (b.length === 4) rr(b[0], b[1], b[2], b[3], n.length === 2 ? 4 : 1.5, f); else cc(b[0], b[1], b[2], f); }
-    h.save(); h.translate(135 * u, cy * u); h.scale(sc, sc); h.translate(-135 * u, -cy * u);
+    h.save(); h.translate(px * u, cy * u); h.scale(sc, sc); h.translate(-135 * u, -cy * u);
     key('l2', EDGE); key('r2', EDGE); key('l1', EDGE); key('r1', EDGE);
     el(74, cy + 30, 23, 34, EDGE); el(196, cy + 30, 23, 34, EDGE); rr(48, cy - 34, 174, 64, 24, EDGE);
     el(74, cy + 30, 21, 32, BODY); el(196, cy + 30, 21, 32, BODY); rr(50, cy - 32, 170, 60, 22, BODY);
@@ -2803,7 +2806,7 @@
     h.restore();
     return function (n) {
       var b = n === 'dpad' ? [84, cy - 8] : B[n], m = b.length === 4 ? [b[0] + b[2] / 2, b[1] + b[3] / 2] : [b[0], b[1]];
-      return [135 + (m[0] - 135) * sc, cy + (m[1] - cy) * sc];
+      return [px + (m[0] - 135) * sc, cy + (m[1] - cy) * sc];
     };
   }
   function drawWiz(u) {
@@ -2811,27 +2814,30 @@
     var step = WIZ[wiz.i], lit = {};
     lit[step[0]] = C.flame;
     box(0, 0, LW, LH, '#070914');
-    pxText('CONTROLLER SETUP', 135, 70, 2, C.flame, 'center');
-    pxText((wiz.i + 1) + ' OF ' + WIZ.length, 135, 92, 1, C.dim, 'center');
-    drawPad(u, 200, wiz.armed ? lit : null);
-    pxText(wiz.armed ? 'PRESS' : 'LET GO OF EVERYTHING', 135, 286, 2, wiz.armed ? C.text : C.dim, 'center');
+    pxText('CONTROLLER SETUP', MX, 12, 2, C.flame, 'center');
+    pxText((wiz.i + 1) + ' OF ' + WIZ.length, MX, 30, 1, C.dim, 'center');
+    // the pad on the left, the words on the right
+    drawPad(u, 150, 140, wiz.armed ? lit : null, 1.1);
+    var tx = 372;
+    pxText(wiz.armed ? 'PRESS' : 'LET GO OF', tx, 72, 2, wiz.armed ? C.text : C.dim, 'center');
+    if (!wiz.armed) pxText('EVERYTHING', tx, 90, 2, C.dim, 'center');
     // say it the way the buttons are printed: 8BitDo and Nintendo pads put B at the bottom and A on the right
     var LET = padLetters(wiz.id);
     var FACE = { fb: 'BOTTOM', fr: 'RIGHT', fl: 'LEFT', ft: 'TOP' };
     if (wiz.armed) {
-      if (FACE[step[0]]) { pxText('THE ' + LET[step[0]] + ' BUTTON', 135, 308, 2, C.flame, 'center'); pxText('THE ' + FACE[step[0]] + ' ONE OF THE FOUR ON THE RIGHT', 135, 326, 1, C.text, 'center'); }
-      else pxText(step[1].toUpperCase() + (LET[step[0]] ? ' - ' + LET[step[0]] : ''), 135, 308, 2, C.flame, 'center');
+      if (FACE[step[0]]) { pxText('THE ' + LET[step[0]] + ' BUTTON', tx, 96, 2, C.flame, 'center'); pxText('THE ' + FACE[step[0]] + ' ONE OF THE', tx, 116, 1, C.text, 'center'); pxText('FOUR ON THE RIGHT', tx, 126, 1, C.text, 'center'); }
+      else { var wl = wrapText(step[1].toUpperCase() + (LET[step[0]] ? ' - ' + LET[step[0]] : ''), 16); for (var i = 0; i < wl.length; i++) pxText(wl[i], tx, 96 + i * 18, 2, C.flame, 'center'); }
     }
-    pxText(wiz.see.toUpperCase().substring(0, 42), 135, 340, 1, C.dim, 'center');
-    pxText('IT IS THE ONE LIT UP IN THE PICTURE', 135, 356, 1, C.dim, 'center');
-    pxText('CLICK THE MOUSE OR PRESS ESC TO CANCEL', 135, 440, 1, C.dim, 'center');
+    pxText('IT IS THE ONE LIT UP', tx, 150, 1, C.dim, 'center'); pxText('IN THE PICTURE', tx, 160, 1, C.dim, 'center');
+    pxText(wiz.see.toUpperCase().substring(0, 48), MX, 232, 1, C.dim, 'center');
+    pxText('CLICK THE MOUSE OR PRESS ESC TO CANCEL', MX, 254, 1, C.dim, 'center');
   }
   function drawSettings(u) {
     function box(x, y, w, hh, color) { h.fillStyle = color; h.fillRect(Math.round(x * u), Math.round(y * u), Math.round(w * u), Math.round(hh * u)); }
     var pg = SET_PAGES[set.page], rows = pg.rows, INK = '#101426', i, y, on, id;
     box(0, 0, LW, LH, THEMES.brick.bg);
-    if (set.page !== 'top') pxText('SETTINGS', 135, 16, 1, C.dim, 'center');                 // where you are: SETTINGS above the page name
-    pxText(pg.title, 135, 34, 3, C.flame, 'center');
+    if (set.page !== 'top') pxText('SETTINGS', MX, 4, 1, C.dim, 'center');                  // where you are: SETTINGS above the page name
+    pxText(pg.title, MX, 14, 3, C.flame, 'center');
     function row(k, x, y, w, hh, label, value) {
       var on = k === set.row;
       box(x, y, w, hh, on ? C.flame : '#131a33');
@@ -2844,38 +2850,38 @@
     }
     if (set.page === 'top') {
       for (i = 0; i < rows.length; i++) {
-        y = 130 + i * 44 + (rows[i][0] === 'back' ? 16 : 0);                                   // a gap before BACK
-        row(i, 45, y, 180, 30, rows[i][1], '');
+        y = 48 + i * 36 + (rows[i][0] === 'back' ? 12 : 0);                                     // a gap before BACK
+        row(i, MX - 100, y, 200, 30, rows[i][1], '');
       }
-      pxText(rows[set.row][2], 135, 330, 1, C.text, 'center');
+      pxText(rows[set.row][2], MX, 214, 1, C.text, 'center');
     } else if (set.page === 'theme') {
       for (i = 0; i < rows.length; i++) {
-        y = 110 + i * 32 + (rows[i][0] === 'back' ? 16 : 0);
-        row(i, 13, y, 244, 24, rows[i][1], setValue(rows[i][0]));
+        y = 44 + i * 28 + (rows[i][0] === 'back' ? 10 : 0);
+        row(i, MX - 150, y, 300, 24, rows[i][1], setValue(rows[i][0]));
       }
-      pxText(rows[set.row][2], 135, 262, 1, C.text, 'center');
+      pxText(rows[set.row][2], MX, 176, 1, C.text, 'center');
       // the chosen row's four shades, drawn as they are (outside the colour mapping)
       var pk = rows[set.row][0];
       if (pk === 't-gb' || pk === 't-bw') {
         GB.live = false;
         for (i = 0; i < 4; i++) {
-          box(63 + i * 38, 280, 30, 30, GB.on ? GB_HEX[3] : '#5a6488'); var sx0 = 65 + i * 38;
-          box(sx0, 282, 26, 26, gbHex(GB_PALS[pk === 't-gb' ? 'gb' : 'bw'][i]));
+          box(MX - 60 + i * 32, 190, 24, 24, GB.on ? GB_HEX[3] : '#5a6488'); var sx0 = MX - 58 + i * 32;
+          box(sx0, 192, 20, 20, gbHex(GB_PALS[pk === 't-gb' ? 'gb' : 'bw'][i]));
         }
         GB.live = true;
       }
-      pxText('THE GAME RELOADS TO SWITCH', 135, 326, 1, C.dim, 'center');
+      pxText('THE GAME RELOADS TO SWITCH', MX, 222, 1, C.dim, 'center');
     } else if (set.page === 'graphics') {
       for (i = 0; i < rows.length; i++) {
-        y = 110 + i * 32 + (rows[i][0] === 'back' ? 16 : 0);
-        row(i, 25, y, 220, 24, rows[i][1], setValue(rows[i][0]));
+        y = 44 + i * 28 + (rows[i][0] === 'back' ? 10 : 0);
+        row(i, MX - 150, y, 300, 24, rows[i][1], setValue(rows[i][0]));
       }
-      pxText(rows[set.row][2], 135, 300, 1, C.text, 'center');
+      pxText(rows[set.row][2], MX, 210, 1, C.text, 'center');
     } else {
       drawControls(u, rows, row, box);
     }
-    if (set.note) pxText(set.note, 135, 440, 1, C.teal, 'center');
-    pxText(usedPad ? 'UP/DOWN CHOOSE - JUMP PICKS - DASH BACK' : 'ARROWS CHOOSE - C PICKS - X OR ESC BACK', 135, 464, 1, C.dim, 'center');
+    if (set.note) pxText(set.note, MX, 240, 1, C.teal, 'center');
+    pxText(usedPad ? 'UP/DOWN CHOOSE - JUMP PICKS - DASH BACK' : 'ARROWS CHOOSE - C PICKS - X OR ESC BACK', MX, 256, 1, C.dim, 'center');
   }
   // Settings, Controls: a small controller with every button called out (its printed name and what it does), then one
   // row per action listing its buttons. Choose an action and press a button to give it that job; press one it already
@@ -2885,12 +2891,13 @@
     var cur = set.mode === 'listen' ? set.action : rows[set.row][0], down = set.lit ? set.lit.split(',') : [], lit = {}, i, n;
     for (i = 0; i < ASSIGNABLE.length; i++) { n = ASSIGNABLE[i]; if (act[n] && act[n] === cur) lit[n] = C.flame; }
     for (i = 0; i < down.length; i++) lit[down[i]] = C.teal;
-    pxText(gp ? gp.id.toUpperCase().replace(/[^A-Z0-9 .:\/-]/g, '').substring(0, 40) : 'NO CONTROLLER SEEN', 135, 64, 1, C.dim, 'center');
-    var pt = drawPad(u, 152, lit, 0.62);
+    var PX = 122, PY = 128, RX = 258, RW = 210;                                     // the pad's centre; the rows' left edge and width
+    pxText(gp ? gp.id.toUpperCase().replace(/[^A-Z0-9 .:\/-]/g, '').substring(0, 36) : 'NO CONTROLLER SEEN', PX, 40, 1, C.dim, 'center');
+    var pt = drawPad(u, PX, PY, lit, 0.62);
     // callouts: the right column for the right shoulder and face buttons, the left for the left shoulder, d-pad and Start
     function callout(n, side, y) {
       var job = n === 'dpad' ? 'MOVE' : n === 'start' ? 'BACK' : (act[n] ? actName(act[n]) : '-'), name = n === 'dpad' ? 'PAD' : L[n];
-      var m = pt(n), nameW = name.length * 6 - 1, w = nameW + 5 + job.length * 6 - 1, x0 = side ? 266 - w : 4;
+      var m = pt(n), nameW = name.length * 6 - 1, w = nameW + 5 + job.length * 6 - 1, x0 = side ? PX + 118 - w : PX - 118;
       var lx = side ? x0 - 3 : x0 + w + 3, bend = side ? Math.max(m[0] + 5, Math.min(lx - 6, m[0] + 22)) : Math.min(m[0] - 5, Math.max(lx + 6, m[0] - 22));
       h.strokeStyle = lit[n] || '#3a4677'; h.lineWidth = Math.max(1, u * 0.6); h.beginPath();
       h.moveTo(lx * u, (y + 3.5) * u); h.lineTo(bend * u, (y + 3.5) * u); h.lineTo(m[0] * u, m[1] * u); h.stroke();
@@ -2899,36 +2906,36 @@
       pxText(job, x0 + nameW + 5, y, 1, lit[n] || (job === '-' ? C.dim : C.text), 'left');
     }
     var R = ['r2', 'r1', 'ft', 'fr', 'fl', 'fb'], Lf = ['l2', 'l1', 'dpad'];
-    for (i = 0; i < R.length; i++) callout(R[i], 1, 106 + i * 15);
-    for (i = 0; i < Lf.length; i++) callout(Lf[i], 0, [106, 121, 147][i]);
+    for (i = 0; i < R.length; i++) callout(R[i], 1, PY - 46 + i * 15);
+    for (i = 0; i < Lf.length; i++) callout(Lf[i], 0, [PY - 46, PY - 31, PY - 5][i]);
     var st = pt('start');                                                         // Start: above the pad, a straight drop between the triggers
-    h.strokeStyle = lit.start || '#3a4677'; h.lineWidth = Math.max(1, u * 0.6); h.beginPath(); h.moveTo(st[0] * u, 95 * u); h.lineTo(st[0] * u, st[1] * u); h.stroke();
-    pxText(L.start, st[0] - 3, 85, 1, C.dim, 'right'); pxText('BACK', st[0] + 3, 85, 1, C.text, 'left');
-    if (gp && !c) pxText('THIS CONTROLLER NEEDS SETTING UP FIRST', 135, 210, 1, C.flame, 'center');
+    h.strokeStyle = lit.start || '#3a4677'; h.lineWidth = Math.max(1, u * 0.6); h.beginPath(); h.moveTo(st[0] * u, (PY - 57) * u); h.lineTo(st[0] * u, st[1] * u); h.stroke();
+    pxText(L.start, st[0] - 3, PY - 67, 1, C.dim, 'right'); pxText('BACK', st[0] + 3, PY - 67, 1, C.text, 'left');
+    if (gp && !c) pxText('THIS CONTROLLER NEEDS SETTING UP FIRST', PX, PY + 66, 1, C.flame, 'center');
     if (set.mode === 'listen') {
-      box(25, 232, 220, 80, C.flame);
-      pxText('PRESS A BUTTON FOR', 135, 244, 1, INK, 'center'); pxText(actName(set.action), 135, 260, 3, INK, 'center');
-      pxText('ONE IT ALREADY HAS TAKES IT OFF', 135, 292, 1, INK, 'center');
-      pxText('CLICK THE MOUSE TO CANCEL', 135, 326, 1, C.dim, 'center');
+      box(RX, 60, RW, 90, C.flame);
+      pxText('PRESS A BUTTON FOR', RX + RW / 2, 72, 1, INK, 'center'); pxText(actName(set.action), RX + RW / 2, 88, 3, INK, 'center');
+      pxText('ONE IT ALREADY HAS', RX + RW / 2, 118, 1, INK, 'center'); pxText('TAKES IT OFF', RX + RW / 2, 128, 1, INK, 'center');
+      pxText('CLICK THE MOUSE TO CANCEL', RX + RW / 2, 160, 1, C.dim, 'center');
       return;
     }
-    var y = 228;
+    var y = 40;
     for (i = 0; i < rows.length; i++) {
       var id = rows[i][0], isA = rows[i][2] === 'act', val = '';
       if (isA) { var bs = []; for (var k = 0; k < ASSIGNABLE.length; k++) if (act[ASSIGNABLE[k]] === id) bs.push(L[ASSIGNABLE[k]]); val = bs.join(' ') || 'NONE'; }
-      if (!isA && rows[i - 1] && rows[i - 1][2] === 'act') y += 8;                 // a gap between the actions and the rest
-      if (id === 'back') y += 6;
-      row(i, 25, y, 220, 20, rows[i][1], val);
+      if (!isA && rows[i - 1] && rows[i - 1][2] === 'act') y += 6;                 // a gap between the actions and the rest
+      if (id === 'back') y += 4;
+      row(i, RX, y, RW, 20, rows[i][1], val);
       y += 23;
     }
     var r = rows[set.row];
-    pxText(r[2] === 'act' ? 'SELECT THEN PRESS A BUTTON FOR ' + r[1] : r[2], 135, y + 8, 1, C.text, 'center');
-    pxText('KEYBOARD  ' + ACTIONS.map(function (a) { return KEY_ACT[a[0]] + ' ' + a[1]; }).join('  '), 135, 424, 1, C.dim, 'center');
+    pxText(r[2] === 'act' ? 'SELECT THEN PRESS A BUTTON FOR ' + r[1] : r[2], MX, 222, 1, C.text, 'center');
+    pxText('KEYBOARD  ' + ACTIONS.map(function (a) { return KEY_ACT[a[0]] + ' ' + a[1]; }).join('  '), MX, 232, 1, C.dim, 'center');
   }
   // The map: a fixed header (world, stars, world dots), a scrolling climb of level tiles, and a fixed info panel.
-  // Tiles run four to a row and snake upward from level 1 at the bottom, so any number of levels fits: the view
+  // Tiles run five to a row and snake upward from level 1 at the bottom, so any number of levels fits: the view
   // scrolls a row at a time to keep the chosen tile in sight (MAPV.scroll is the bottom row shown).
-  var MAPV = { cols: 4, tw: 50, th: 42, pitch: 52, xs: [42, 104, 166, 228], top: 100, bot: 400, scroll: 0, w: -1, lift: 0 };
+  var MAPV = { cols: 5, tw: 50, th: 42, pitch: 52, xs: [MX - 120, MX - 60, MX, MX + 60, MX + 120], top: 56, bot: 160, scroll: 0, w: -1, lift: 0 };   // landscape: five to a row, two rows in view
   function nodePos(k) { var row = Math.floor(k / MAPV.cols), p = k % MAPV.cols; return { x: MAPV.xs[row % 2 ? MAPV.cols - 1 - p : p], row: row }; }
   function mapRowsShown() { return Math.floor((MAPV.bot - MAPV.top + MAPV.pitch - MAPV.th) / MAPV.pitch); }
   function mapScroll(n) {                          // keep the chosen row in view with a row of room above and below when there is one
@@ -2956,10 +2963,10 @@
       return;
     }
     if (scene === 'menu') {
-      var m = sel.menu;                            // two big buttons, then a row of three small ones: up and down between the rows, left and right along the small ones
-      if (dy > 0) m = m < MENU_BIG ? m + 1 : m;
-      if (dy < 0) m = m >= MENU_BIG ? MENU_BIG - 1 : Math.max(0, m - 1);
-      if (dx && m >= MENU_BIG) m = Math.max(MENU_BIG, Math.min(MENU.length - 1, m + dx));
+      var m = sel.menu;                            // two big buttons side by side, then a row of three small ones: down and up between the rows, left and right along a row
+      if (dy > 0) m = m < MENU_BIG ? MENU_BIG : m;
+      if (dy < 0) m = m >= MENU_BIG ? 0 : m;
+      if (dx) m = m >= MENU_BIG ? Math.max(MENU_BIG, Math.min(MENU.length - 1, m + dx)) : Math.max(0, Math.min(MENU_BIG - 1, m + dx));
       if (m !== sel.menu) { sel.menu = m; menuNote = ''; }
       if (go) MENU[sel.menu][2]();
       return;
@@ -2992,18 +2999,18 @@
     if (scene === 'settings') drawSettings(u);
     else if (scene === 'menu') {
       box(0, 0, LW, LH, THEMES.brick.bg);
-      for (i = 0; i < 6; i++) box(0, 446 - i * 6, LW, 1, i % 2 ? '#10152e' : '#141a38');
-      // the hero, big
-      if (hero.ready) { h.imageSmoothingEnabled = false; h.drawImage(hero.sheets[0], 0, 0, 16, 16, Math.round(103 * u), Math.round(66 * u), Math.round(64 * u), Math.round(64 * u)); }
+      for (i = 0; i < 6; i++) box(0, LH - 24 - i * 6, LW, 1, i % 2 ? '#10152e' : '#141a38');
+      // the hero, big, standing on the floor stripes at the left
+      if (hero.ready) { h.imageSmoothingEnabled = false; h.drawImage(hero.sheets[0], 0, 0, 16, 16, Math.round(22 * u), Math.round((LH - 24 - 64) * u), Math.round(64 * u), Math.round(64 * u)); }
       else if (!HERO.enabled) {
-        box(119, 96, 32, 40, C.body); box(135, 108, 4, 8, C.eye); box(143, 108, 4, 8, C.eye);
-        box(127, 88, 16, 8, C.flame); box(131, 80, 8, 8, C.flame);
+        box(38, LH - 64, 32, 40, C.body); box(54, LH - 52, 4, 8, C.eye); box(62, LH - 52, 4, 8, C.eye);
+        box(46, LH - 72, 16, 8, C.flame); box(50, LH - 80, 8, 8, C.flame);
       }
       drawMenu(u, box);
     } else {
       drawMap(u, box);
     }
-    if (check === 1) t(fps.secs < 2 ? 'measuring' : fps.now + ' fps', 135, 10, 7, C.flame, 'center');
+    if (check === 1) t(fps.secs < 2 ? 'measuring' : fps.now + ' fps', MX, 10, 7, C.flame, 'center');
     if (wiz.on) drawWiz(u);
   }
 
@@ -3044,42 +3051,42 @@
     h.restore();
     if (rows > V) {                                                    // more above or below: a rail with a thumb, and soft edges
       var railT = MAPV.top + 4, railH = MAPV.bot - MAPV.top - 8, thH = Math.max(12, railH * V / rows), thY = railT + (railH - thH) * (1 - scroll / (rows - V));
-      box(265, railT, 2, railH, '#1c2448'); box(264.5, thY, 3, thH, th.accent);
+      box(LW - 15, railT, 2, railH, '#1c2448'); box(LW - 15.5, thY, 3, thH, th.accent);
     }
 
     // header: world dots, the world's number and name, its stars, arrows to the next and last worlds
     box(0, 0, LW, MAPV.top - 6, th.bg); box(0, MAPV.top - 7, LW, 1, th.accentLo);
-    pxText('WORLD ' + wd.id, 135, 14, 1, C.dim, 'center');
-    var nm = hudClean(wd.name), ns = nm.length * 18 - 3 > 200 ? 2 : 3;
-    pxText(nm, 135, 28, ns, th.accent, 'center');
+    pxText('WORLD ' + wd.id, MX, 5, 1, C.dim, 'center');
+    var nm = hudClean(wd.name), ns = 2;
+    pxText(nm, MX, 14, ns, th.accent, 'center');
     var gs = got + ' / ' + tot, gw = gs.length * 6 - 1 + 11;
-    pxStar(135 - gw / 2, 58, 0.62, C.flame, C.flame); pxText(gs, 135 - gw / 2 + 11, 58.5, 1, C.text, 'left');
-    var dx0 = 135 - (levels.length * 8 + 6 - 4) / 2;                                 // one dot per world, the current one long
-    for (i = 0; i < levels.length; i++) { var dw = i === w ? 10 : 4; box(dx0, 74, dw, 3, i === w ? th.accent : (worldOpen(i) ? '#3a4677' : '#1c2448')); dx0 += dw + 4; }
+    pxStar(MX - gw / 2, 31, 0.62, C.flame, C.flame); pxText(gs, MX - gw / 2 + 11, 31.5, 1, C.text, 'left');
+    var dx0 = MX - (levels.length * 8 + 6 - 4) / 2;                                 // one dot per world, the current one long
+    for (i = 0; i < levels.length; i++) { var dw = i === w ? 10 : 4; box(dx0, 43, dw, 3, i === w ? th.accent : (worldOpen(i) ? '#3a4677' : '#1c2448')); dx0 += dw + 4; }
     // arrows to the neighbouring worlds, each with the button that gets there: the triggers on a pad, Q and E on a keyboard
     var gp = firstPad(), PL = padLetters(gp && gp.id), kl = usedPad ? PL.l2 : 'Q', kr = usedPad ? PL.r2 : 'E';
     function chip(cx, label, on) {
       var cw = label.length * 6 + 3, x = Math.round(cx - cw / 2);
-      box(x, 47, cw, 10, on ? '#3a4677' : '#1c2448'); box(x + 0.5, 47.5, cw - 1, 9, '#1a2140'); box(x + 0.5, 47.5, cw - 1, 1, on ? '#4a5a9e' : '#232c55');
-      pxText(label, x + 2, 49, 1, on ? C.text : '#3a4677', 'left');
+      box(x, 30, cw, 10, on ? '#3a4677' : '#1c2448'); box(x + 0.5, 30.5, cw - 1, 9, '#1a2140'); box(x + 0.5, 30.5, cw - 1, 1, on ? '#4a5a9e' : '#232c55');
+      pxText(label, x + 2, 32, 1, on ? C.text : '#3a4677', 'left');
     }
-    if (levels[w - 1]) { arrow(12, 30, -1, C.text); hits.push({ x: 0, y: 14, w: 44, h: 50, fn: function () { mapWorld(-1); } }); }
-    if (levels[w + 1]) { arrow(252, 30, 1, C.text); hits.push({ x: 226, y: 14, w: 44, h: 50, fn: function () { mapWorld(1); } }); }
-    chip(15, kl, !!levels[w - 1]); chip(255, kr, !!levels[w + 1]);
+    if (levels[w - 1]) { arrow(12, 12, -1, C.text); hits.push({ x: 0, y: 4, w: 44, h: 44, fn: function () { mapWorld(-1); } }); }
+    if (levels[w + 1]) { arrow(LW - 18, 12, 1, C.text); hits.push({ x: LW - 44, y: 4, w: 44, h: 44, fn: function () { mapWorld(1); } }); }
+    chip(15, kl, !!levels[w - 1]); chip(LW - 15, kr, !!levels[w + 1]);
 
     // info panel: the chosen level
     var cur = list[sel.i], cp = cur && prog[cur.id];
     box(0, MAPV.bot + 6, LW, LH - MAPV.bot - 6, th.bg); box(0, MAPV.bot + 6, LW, 1, th.accentLo);
-    if (!n) pxText('NO LEVELS HERE YET', 135, 250, 1, C.dim, 'center');
-    else if (!open) pxText('FINISH WORLD ' + WORLDS[w - 1].id + ' TO OPEN THIS ONE', 135, 436, 1, C.text, 'center');
-    else if (!levelOpen(w, sel.i)) pxText('BEAT ' + wd.id + '-' + sel.i + ' FIRST', 135, 436, 1, C.text, 'center');
+    if (!n) pxText('NO LEVELS HERE YET', MX, 110, 1, C.dim, 'center');
+    else if (!open) pxText('FINISH WORLD ' + WORLDS[w - 1].id + ' TO OPEN THIS ONE', MX, 196, 1, C.text, 'center');
+    else if (!levelOpen(w, sel.i)) pxText('BEAT ' + wd.id + '-' + sel.i + ' FIRST', MX, 196, 1, C.text, 'center');
     else {
-      var title = (cur.trial ? 'TRIAL: ' : '') + hudClean(cur.name), tsc = title.length * 12 - 2 <= 250 ? 2 : 1;
-      pxText(wd.id + '-' + (sel.i + 1), 135, 419, 1, th.accent, 'center');
-      pxText(title, 135, 431 + (tsc === 1 ? 4 : 0), tsc, C.text, 'center');
-      pxText((cp ? 'BEST ' + secs(cp.time).toUpperCase() + '   ' : '') + 'PAR ' + secs(parOf(cur)).toUpperCase(), 135, 450, 1, C.dim, 'center');
+      var title = (cur.trial ? 'TRIAL: ' : '') + hudClean(cur.name), tsc = title.length * 12 - 2 <= 300 ? 2 : 1;
+      pxText(wd.id + '-' + (sel.i + 1), MX, 176, 1, th.accent, 'center');
+      pxText(title, MX, 188 + (tsc === 1 ? 4 : 0), tsc, C.text, 'center');
+      pxText((cp ? 'BEST ' + secs(cp.time).toUpperCase() + '   ' : '') + 'PAR ' + secs(parOf(cur)).toUpperCase(), MX, 208, 1, C.dim, 'center');
     }
-    pxText(usedPad ? 'JUMP PLAYS - DASH MENU' : 'ARROWS MOVE - C PLAYS - ESC MENU', 135, 467, 1, '#5a6590', 'center');
+    pxText(usedPad ? 'JUMP PLAYS - DASH MENU' : 'ARROWS MOVE - C PLAYS - ESC MENU', MX, 256, 1, '#5a6590', 'center');
   }
   // Screen check: shows what the display is doing, marks the picture's edges, and can lay the tile grid on top.
   function drawCheck(u, t) {
@@ -3096,7 +3103,7 @@
     h.fillRect(hud.width - L, 0, L, w); h.fillRect(hud.width - w, 0, w, L);
     h.fillRect(0, hud.height - w, L, w); h.fillRect(0, hud.height - L, w, L);
     h.fillRect(hud.width - L, hud.height - w, L, w); h.fillRect(hud.width - w, hud.height - L, w, L);
-    h.fillStyle = 'rgba(11,16,32,0.88)'; h.fillRect(6 * u, 14 * u, 216 * u, 66 * u);
+    h.fillStyle = 'rgba(11,16,32,0.88)'; h.fillRect(6 * u, 14 * u, 260 * u, 66 * u);
     t('SCREEN CHECK' + (check === 3 ? '  grid ' + cols + ' x ' + rows : ''), 10, 23, 6, C.flame);
     t('Window ' + view.physW + ' x ' + view.physH + ' px', 10, 33, 7, C.text);
     t('Scale ' + (view.whole ? view.scale + 'x' : view.scale.toFixed(2) + 'x') + ', pixels square: ' + (view.whole ? 'yes' : 'no'), 10, 43, 7, C.text);
@@ -3189,7 +3196,7 @@
     demoAll: function () { // plays every recorded demo to the end, to prove the recordings still reach the exit
       var out = {}, i, n;
       for (i = 0; i < starters.length; i++) {
-        demo.room = starters[i]; demo.rec = i ? DEMOS[starters[i].id] : null; if (i && !demo.rec) { out[starters[i].name] = 'no recording'; continue; }
+        demo.room = starters[i]; demo.rec = DEMOS[starters[i].id] || null; if (!demo.rec) { out[starters[i].name] = 'no recording'; continue; }   // wide: level 1 is recorded like the rest
         demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0;
         scene = 'play'; demo.on = true; demo.stage = 1; demo.f = 0; demo.t0 = 0; demo.back = false; demo.winT = 0; resetRun();
         for (n = 0; n < 4000 && !run.won && !pl.dead; n++) step(demoInput());
@@ -3205,7 +3212,7 @@
     demoStart: function () { startDemo(); }, demoStep: function (n) { for (var i = 0; i < n; i++) step(demoInput()); return this.state(); },
     chainProbe: function () { // plays room one as a normal run with the demo's inputs, to prove the exit leads to room two
       scene = 'play'; mode = 'endless';
-      demo.rec = null; demo.stage = 1; demo.f = 0; demo.t0 = 0; demo.back = false;
+      demo.rec = DEMOS[room.id] || null; demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0; demo.stage = 1; demo.f = 0; demo.t0 = 0; demo.back = false;
       var n = 0, none = { x: 0, y: 0, jump: false, dash: false, grab: false };
       while (run.count === 1 && n < 3000) { step(demoInput()); n++; }
       for (var i = 0; i < 40; i++) step(none);
@@ -3226,7 +3233,7 @@
       put(gems, s.gm); put(roomKeys, s.ky); put(doors, s.dr); put(refills, s.rf); if (lava && s.lava) Object.assign(lava, s.lava);
       if (s.fo) { put(foes, s.fo); put(barrels, s.br); shots = s.sh.map(function (o) { return Object.assign({}, o); }); foeShots = s.fs.map(function (o) { return Object.assign({}, o); }); combat.stop = s.stop; }
     },
-    demoRun: function (n) { startDemo(); demo.room = starters[0]; demo.rec = null; resetRun(); for (var i = 0; i < n && !run.won; i++) step(demoInput()); return { steps: i, won: run.won, deaths: run.deaths, stage: demo.stage }; }
+    demoRun: function (n) { startDemo(); demo.room = starters[0]; demo.rec = DEMOS[starters[0].id] || null; demo.rk = 0; demo.rleft = demo.rec ? demo.rec[1] : 0; resetRun(); for (var i = 0; i < n && !run.won; i++) step(demoInput()); return { steps: i, won: run.won, deaths: run.deaths, stage: demo.stage }; }
   };
 })();
 </script>

@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.goto('file:///home/claude/climber-wide/index.html');
   await p.addScriptTag({ content: fs.readFileSync('/home/claude/climber-wide/src/gen.js', 'utf8') + '\nwindow.generateRoom = generateRoom;' });
@@ -12,7 +12,7 @@ const fs = require('fs');
   if (process.env.LAYOUT) await p.evaluate((l) => { window.__layout = l; }, process.env.LAYOUT);
   const out = await p.evaluate(([N, SP, ONE]) => {
     const G = window.__climber; G.manual(true);
-    const col = (t, d) => d > 0 ? 1 + t : 25 - t;
+    const CW = window.SCREEN.cols, col = (t, d) => d > 0 ? 1 + t : CW - 2 - t;   // the room shape comes from shared-screen.js
     function solve(out) {
       G.load(out.room);
       let s = G.state(), frames = 0, where = 'spawn';
@@ -28,7 +28,7 @@ const fs = require('fs');
         const endEdge = (t) => d > 0 ? (col(t, d) + 1) * 10 : col(t, d) * 10;
         const dist = (t) => d > 0 ? startEdge(t) - lead() : lead() - startEdge(t);
         const past = (t, m) => d > 0 ? trail() >= endEdge(t) + m : trail() <= endEdge(t) - m;
-        const mover = (rowY) => s.movers.filter(m => m.y === rowY)[0];
+        const mover = (rowY, nearX) => { const ms = s.movers.filter(m => m.y === rowY); if (nearX === undefined) return ms[0]; let best = null; for (const m of ms) if (!best || Math.abs(m.x - nearX) < Math.abs(best.x - nearX)) best = m; return best; };   // a wide floor can hold two ferries: take the one nearest
         for (let o of F.obs) {
           if (o.type === 'icespikes') o = { type: 'spikes', t0: o.t0 + o.L, w: o.sw };            // slide along the ice, then it is an ordinary spike jump
           else if (o.type === 'iceblock') o = { type: 'block', t0: o.t0 + o.L, w: 2, h: 2 };
@@ -82,10 +82,10 @@ const fs = require('fs');
             const startX = Math.min(cA, cB) * 10, endX = Math.min(cE, cE2) * 10;
             until(() => ({ x: d }), () => dist(o.t0) <= 9);
             for (let k = 0; k < 8; k++) step({});
-            until(() => ({}), () => { const m = mover(rowY); return m && m.x === startX && (m.z === 'idle' || m.wait > 0.15); }, 900);   // a zip mover waits at the start on its own
+            until(() => ({}), () => { const m = mover(rowY, startX); return m && m.x === startX && (m.z === 'idle' || m.wait > 0.15); }, 900);   // a zip mover waits at the start on its own
             // straight up first (spikes or a pit start right at the edge), then drift onto the platform
             until((k) => ({ x: s.y + 10 <= rowY ? ((d > 0 ? s.x >= startEdge(o.t0) + 8 : s.x + 8 <= startEdge(o.t0) - 8) ? 0 : d) : 0, jump: k < 1 || s.vy < 0 }), () => s.ground && s.y + 10 === rowY, 200);
-            until(() => ({}), () => { const m = mover(rowY); return m && m.x === endX; }, 900);
+            until(() => ({}), () => { const m = mover(rowY, (startX + endX) / 2); return m && m.x === endX; }, 900);
             until(() => ({ x: past(o.t0 + o.w - 1, 2) ? 0 : d }), () => past(o.t0 + o.w - 1, 2) && s.ground && s.y + 10 === y * 10, 300);
             step({});
             continue;
@@ -125,7 +125,7 @@ const fs = require('fs');
         if (!F.conn) { where = 'floor ' + fi + ' exit'; until(() => ({ x: d }), () => false, 600); }
         const C = F.conn, yN = y - C.Hf;
         where = 'floor ' + fi + ' ' + C.type + ' W' + C.W + ' Hf' + C.Hf;
-        const FW = 25 - (C.sh || 0);                       // tile where the far wall starts on this floor
+        const FW = CW - 2 - (C.sh || 0);                       // tile where the far wall starts on this floor
         const wallX = d > 0 ? col(FW, d) * 10 : (col(FW, d) + 1) * 10;
         const atWall = () => d > 0 ? s.x + 8 >= wallX : s.x <= wallX;
         const nearWall = () => d > 0 ? s.x + 8 >= wallX - 6 : s.x <= wallX + 6;
@@ -178,7 +178,7 @@ const fs = require('fs');
         const miss = (q) => { if (s.ground && !feetOn(q)) throw new Error('missed at ' + where + ' at ' + s.x + ',' + s.y + ' want y ' + (q.y * 10 - 10) + ' x ' + q.x * 10 + '-' + (q.x + q.w) * 10); };
         let retries = 0, deaths = 0;
         for (let k = 1; k < isl.length; k++) {
-          const q = isl[k], p = isl[k - 1], d = q.x + q.w / 2 > p.x + p.w / 2 ? 1 : -1;
+          const q = isl[k], p = isl[k - 1], d = k === 1 && q.dir ? q.dir : (q.x + q.w / 2 > p.x + p.w / 2 ? 1 : -1);   // off the floor: the plan's direction (a wide floor's centre says nothing)
           where = 'island ' + k + ' ' + q.move;
           try {
             if (!feetOn(p)) {                                // fell somewhere: settle, find the island we are on, and redo from there
@@ -248,13 +248,13 @@ const fs = require('fs');
       }
     }
     const res = { total: 0, fail: [], times: {}, demos: {} };
-    if (N === 0) { for (let i = 1; i < SP.rooms.length; i++) { res.total++; window.__rec = []; try { const r = solve({ room: SP.rooms[i], plan: SP.plans[i] }); if (!r.ok) res.fail.push([SP.rooms[i].name, r.why]); } catch (e) { if (!e.won) res.fail.push([SP.rooms[i].name, e.message]); else { res.times[SP.rooms[i].id] = +(window.__frames / 60).toFixed(1); const rl = []; for (const c of window.__rec) { if (rl.length && rl[rl.length - 2] === c) rl[rl.length - 1]++; else rl.push(c, 1); } res.demos[SP.rooms[i].id] = rl; } } } window.__rec = null; return res; }
+    if (N === 0) { for (let i = 0; i < SP.rooms.length; i++) { res.total++; window.__rec = []; try { const r = solve({ room: SP.rooms[i], plan: SP.plans[i] }); if (!r.ok) res.fail.push([SP.rooms[i].name, r.why]); } catch (e) { if (!e.won) res.fail.push([SP.rooms[i].name, e.message]); else { res.times[SP.rooms[i].id] = +(window.__frames / 60).toFixed(1); const rl = []; for (const c of window.__rec) { if (rl.length && rl[rl.length - 2] === c) rl[rl.length - 1]++; else rl.push(c, 1); } res.demos[SP.rooms[i].id] = rl; } } } window.__rec = null; return res; }
     if (ONE) { const out = window.generateRoom(ONE.opts, ONE.seed); const tr = []; window.__tr = tr; try { solve(out); } catch (e) { return { total: 1, fail: [[tr.join(' | '), e.message || 'won']] }; } return { total: 1, fail: [] }; }
     const styles = ['mixed', 'jump', 'dash', 'climb'];
     const process_layout = (seed, ob) => (window.__layout || 'floors');   // islands are work in progress: LAYOUT=islands to sweep them
     for (let seed = 1; seed <= N; seed++) for (let D = 1; D <= (N === 1 ? 1 : 5); D++) for (const style of styles) for (let ob = 0; ob < 3; ob++) for (let sp = 0; sp < 3; sp++) {
       const el = seed % 4;   // rotate which new pieces are switched on
-      const opts = { difficulty: D, obstacles: ob, styles: style === 'mixed' ? [] : (seed % 3 === 0 ? [style, 'jump'] : [style]), spikes: Math.max(1, sp), world: seed % 5 + 1, rows: seed % 7 === 0 ? 96 : 48, layout: process_layout(seed, ob),
+      const opts = { difficulty: D, obstacles: ob, styles: style === 'mixed' ? [] : (seed % 3 === 0 ? [style, 'jump'] : [style]), spikes: Math.max(1, sp), world: seed % 5 + 1, rows: seed % 7 === 0 ? window.SCREEN.tall : window.SCREEN.rows, layout: process_layout(seed, ob),
                      elements: { springs: seed % 4 !== 1, gems: true, firepits: seed % 3 !== 1, fireballs: seed % 3 !== 2, spikes: sp > 0, refills: seed % 2 === 0, ice: el === 1 || el === 3, crumble: el === 2 || el === 3, movers: el === 0 || el === 3, zips: seed % 5 !== 2, keys: seed % 3 !== 0, jets: seed % 4 !== 3, lava: seed % 2 === 1, lasers: seed % 3 !== 1, drones: seed % 4 !== 2, wires: seed % 2 === 0, holos: seed % 3 !== 2 } };
       const out = window.generateRoom(opts, seed * 7919 + D * 31 + ob * 7 + sp);
       res.total++;

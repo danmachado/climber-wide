@@ -5,7 +5,7 @@ const OUT = process.env.OUT || '/home/claude/combat', fs = require('fs');
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
   if (process.env.THEME) await p.addInitScript((t) => localStorage.setItem('climberwide.theme.v1', t), process.env.THEME);

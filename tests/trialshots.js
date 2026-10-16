@@ -6,7 +6,7 @@ const ROOT = '/home/claude/climber-wide', OUT = '/home/claude/trial-shots';
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   await p.goto('file://' + ROOT + '/index.html');
   const runs = JSON.parse(fs.readFileSync(ROOT + '/src/trial-runs.json', 'utf8'));
   for (const f of fs.readdirSync(ROOT + '/src/trials').filter(f => f.endsWith('.json')).sort()) {

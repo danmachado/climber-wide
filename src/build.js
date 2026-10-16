@@ -1,11 +1,13 @@
 var fs = require('fs'), d = __dirname;
-var tilesJs = fs.readFileSync(d + '/shared-tiles.js', 'utf8'), gen = fs.readFileSync(d + '/gen.js', 'utf8'), cfg = fs.readFileSync(d + '/shared-config.js', 'utf8'), heroJs = fs.readFileSync(d + '/shared-hero.js', 'utf8'), worldsJs = fs.readFileSync(d + '/shared-worlds.js', 'utf8'), foesJs = fs.readFileSync(d + '/shared-foes.js', 'utf8');
-var generateRoom = new Function(gen + '\nreturn generateRoom;')();
+var tilesJs = fs.readFileSync(d + '/shared-tiles.js', 'utf8'), gen = fs.readFileSync(d + '/gen.js', 'utf8'), cfg = fs.readFileSync(d + '/shared-config.js', 'utf8'), heroJs = fs.readFileSync(d + '/shared-hero.js', 'utf8'), worldsJs = fs.readFileSync(d + '/shared-worlds.js', 'utf8'), foesJs = fs.readFileSync(d + '/shared-foes.js', 'utf8'), screenJs = fs.readFileSync(d + '/shared-screen.js', 'utf8');
+var generateRoom = new Function(screenJs + '\n' + gen + '\nreturn generateRoom;')();
 
 // Built-in starter set: the hand-made first room plus generated rooms (each one is cleared by the auto-player in tests).
 // About half of each world uses the island layout (floating slabs, pillars and shelves to climb) instead of floors.
-var first = JSON.parse(fs.readFileSync(d + '/starter-01.json', 'utf8'));
+// Wide: every level is generated for now, level 1 included (the frame's hand-made 1-1 is portrait and stays there).
+// A hand-made wide 1-1 with the combat trial goes back in when Dan has played the wide build.
 var SET = [   // Brickyard: the common pieces, introduced one at a time, then all together
+  ['First Light', { difficulty: 1, obstacles: 0, styles: ['jump'],  spikes: 0, elements: { refills: true } }, 4110],
   ['Low Road',    { difficulty: 1, obstacles: 0, styles: ['jump'],  spikes: 1, elements: { spikes: true, refills: true, springs: true } }, 4111],
   ['Brickwork',   { difficulty: 1, obstacles: 1, styles: [],        spikes: 1, elements: { spikes: true, refills: true, crumble: true, gems: true } }, 4112],
   ['Switchback',  { difficulty: 2, obstacles: 1, styles: ['climb'], layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, movers: true, gems: true } }, 4213],
@@ -60,17 +62,17 @@ var SET5 = [
 ];
 // One tall (two-screen) level per world, so the scrolling camera has something to show.
 var TALL = [
-  ['The Long Way', { difficulty: 2, obstacles: 1, styles: ['climb'], layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, crumble: true, movers: true, zips: true, springs: true, gems: true, keys: true }, world: 1, rows: 96 }, 7111],
-  ['Cold Shaft',   { difficulty: 3, obstacles: 1, styles: [],        spikes: 1, elements: { spikes: true, refills: true, ice: true, springs: true, zips: true, gems: true, keys: true }, world: 2, rows: 96 }, 7212],
-  ['The Chimney',  { difficulty: 3, obstacles: 1, styles: ['jump'],  layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, firepits: true, fireballs: true, jets: true, lava: true, springs: true, gems: true }, world: 3, rows: 96 }, 7313],
-  ['The Pyramid',  { difficulty: 3, obstacles: 1, styles: [],        spikes: 1, elements: { spikes: true, refills: true, zips: true, springs: true, lasers: true, drones: true, gems: true, keys: true }, world: 4, rows: 96 }, 7414],
-  ['The Tower',    { difficulty: 3, obstacles: 1, styles: ['climb'], layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, zips: true, springs: true, crumble: true, gems: true, keys: true }, world: 5, rows: 96 }, 7515]
+  ['The Long Way', { difficulty: 2, obstacles: 1, styles: ['climb'], layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, crumble: true, movers: true, zips: true, springs: true, gems: true, keys: true }, world: 1, rows: 54 }, 7111],
+  ['Cold Shaft',   { difficulty: 3, obstacles: 1, styles: [],        spikes: 1, elements: { spikes: true, refills: true, ice: true, springs: true, zips: true, gems: true, keys: true }, world: 2, rows: 54 }, 7212],
+  ['The Chimney',  { difficulty: 3, obstacles: 1, styles: ['jump'],  layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, firepits: true, fireballs: true, jets: true, lava: true, springs: true, gems: true }, world: 3, rows: 54 }, 7313],
+  ['The Pyramid',  { difficulty: 3, obstacles: 1, styles: [],        spikes: 1, elements: { spikes: true, refills: true, zips: true, springs: true, lasers: true, drones: true, gems: true, keys: true }, world: 4, rows: 54 }, 7414],
+  ['The Tower',    { difficulty: 3, obstacles: 1, styles: ['climb'], layout: 'islands', spikes: 1, elements: { spikes: true, refills: true, zips: true, springs: true, crumble: true, gems: true, keys: true }, world: 5, rows: 54 }, 7515]
 ];
-first.world = 1; first.level = 1;
-var starters = [first], plans = [null];
+var starters = [], plans = [];
 SET.forEach(function (s, i) {
+  s[1].world = 1;
   var out = generateRoom(s[1], s[2]);
-  out.room.id = 'starter-0' + (i + 2); out.room.name = s[0]; out.room.world = 1; out.room.level = i + 2;
+  out.room.id = 'starter-0' + (i + 1); out.room.name = s[0]; out.room.world = 1; out.room.level = i + 1;
   starters.push(out.room); plans.push(out.plan);
 });
 SET2.forEach(function (s, i) {
@@ -83,7 +85,6 @@ SET2.forEach(function (s, i) {
 // unhurried run earns the time star. The hand-made first room uses the demo's time instead.
 var PAR_MARGIN = 1.4, times = {};
 try { times = JSON.parse(fs.readFileSync(d + '/starter-times.json', 'utf8')); } catch (e) {}
-first.par = 29;
 starters.forEach(function (r) { if (times[r.id]) r.par = Math.ceil(times[r.id] * PAR_MARGIN); });
 SET3.forEach(function (s, i) {
   s[1].world = 3;
@@ -115,10 +116,11 @@ fs.writeFileSync(d + '/starter-plans.json', JSON.stringify({ rooms: starters, pl
 // one with a recorded run in src/trial-runs.json). They go after a world's own levels and never hold the next world
 // back. Par is the recorded run's time x TRIAL_MARGIN (the search plays sharper than a person), and the recording
 // joins the idle demo.
+var WIDE_TRIALS = false;   // the six trial rooms are 27 wide (portrait); they come back once redrawn for 48 x 27
 var TRIAL_MARGIN = 2, trialRuns = {};
 try { trialRuns = JSON.parse(fs.readFileSync(d + '/trial-runs.json', 'utf8')); } catch (e) {}
 var trialDemos = {};
-fs.readdirSync(d + '/trials').filter(function (f) { return /\.json$/.test(f); }).map(function (f) { return JSON.parse(fs.readFileSync(d + '/trials/' + f, 'utf8')); })
+(WIDE_TRIALS ? fs.readdirSync(d + '/trials') : []).filter(function (f) { return /\.json$/.test(f); }).map(function (f) { return JSON.parse(fs.readFileSync(d + '/trials/' + f, 'utf8')); })
   .sort(function (a, b) { return (a.difficulty - b.difficulty) || (a.id < b.id ? -1 : 1); }).forEach(function (r) {   // easier trials first
   var top = 0;
   starters.forEach(function (s) { if (worldOfRoom(s) === r.world) top = Math.max(top, s.level || 0); });
@@ -133,12 +135,12 @@ fs.readdirSync(d + '/trials').filter(function (f) { return /\.json$/.test(f); })
 });
 function worldOfRoom(r) { return r.world || 1; }
 
-var one = JSON.stringify(first), all = JSON.stringify(starters);
+var one = JSON.stringify(starters[0]), all = JSON.stringify(starters);
 var demos = '{}';
 try { demos = fs.readFileSync(d + '/starter-demos.json', 'utf8'); } catch (e) {}
 demos = JSON.stringify(Object.assign(JSON.parse(demos), trialDemos));
 function fill(t, rooms) {
-  return t.split('/*ALL_ROOMS*/').join(all.slice(1, -1)).split('/*DEMOS*/').join(demos).split('/*ROOM_JSON*/').join(rooms).split('/*SHARED_TILES*/').join(tilesJs).split('/*GEN*/').join(gen).split('/*SHARED_CONFIG*/').join(cfg).split('/*SHARED_HERO*/').join(heroJs).split('/*SHARED_FOES*/').join(foesJs).split('/*SHARED_WORLDS*/').join(worldsJs);
+  return t.split('/*ALL_ROOMS*/').join(all.slice(1, -1)).split('/*DEMOS*/').join(demos).split('/*ROOM_JSON*/').join(rooms).split('/*SHARED_TILES*/').join(tilesJs).split('/*GEN*/').join(gen).split('/*SHARED_CONFIG*/').join(cfg).split('/*SHARED_HERO*/').join(heroJs).split('/*SHARED_FOES*/').join(foesJs).split('/*SHARED_WORLDS*/').join(worldsJs).split('/*SHARED_SCREEN*/').join(screenJs);
 }
 fs.writeFileSync(d + '/../index.html', fill(fs.readFileSync(d + '/template.html', 'utf8'), all.slice(1, -1)));
 fs.mkdirSync(d + '/../builder', { recursive: true });

@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
   await p.goto('file:///home/claude/climber-wide/index.html#unlock'); await p.waitForTimeout(700);
@@ -37,10 +37,10 @@ const { chromium } = require('playwright');
   // mouse: click MAIN MENU on the panel (fullscreen takes the first click)
   await start(0, 1); await key('Escape');
   const bx = await p.evaluate(() => { const c = document.getElementById('stage').getBoundingClientRect(); return { x: c.left, y: c.top, w: c.width, h: c.height }; });
-  for (let k = 0; k < 2; k++) { await p.mouse.click(bx.x + 135 / 270 * bx.w, bx.y + (108 + 104 + 3 * 32 + 12) / 480 * bx.h); await p.waitForTimeout(200); }
+  for (let k = 0; k < 2; k++) { await p.mouse.click(bx.x + (240 + 162) / 480 * bx.w, bx.y + (48 + 94 + 13) / 270 * bx.h); await p.waitForTimeout(200); }
   v = await V(); ok(v.scene === 'menu', 'clicking MAIN MENU works');
   // endless: pause works there too
-  await p.evaluate(() => window.__climber.nav({ y: 1 })); await p.evaluate(() => window.__climber.nav({ jump: true })); await p.waitForTimeout(800);
+  await p.evaluate(() => window.__climber.nav({ x: 1 })); await p.evaluate(() => window.__climber.nav({ jump: true })); await p.waitForTimeout(800);   // ENDLESS is right of MAP
   await key('Escape'); v = await V(); ok(v.mode === 'endless' && v.pause.on, 'pause works in endless');
   await p.screenshot({ path: __dirname + '/pause-3.png' });
   console.log('errors', JSON.stringify(errs));

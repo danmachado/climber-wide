@@ -9,7 +9,7 @@ const fs = require('fs');
 const ROOT = '/home/claude/climber-wide';
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   p.on('console', m => { if (m.type() === 'log') console.log('  ' + m.text()); });
   await p.goto('file://' + ROOT + '/index.html');

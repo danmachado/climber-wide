@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
   await p.goto('file:///home/claude/climber-wide/index.html'); await p.waitForTimeout(700);
@@ -31,7 +31,7 @@ const { chromium } = require('playwright');
   v = await nav({ jump: true }); ok(v.scene === 'settings' && v.set.page === 'top', 'menu remembers SETTINGS');
   await p.waitForTimeout(150);
   const bx = await p.evaluate(() => { const c = document.getElementById('stage').getBoundingClientRect(); return { x: c.left, y: c.top, w: c.width, h: c.height }; });
-  for (let k = 0; k < 2; k++) { await p.mouse.click(bx.x + 135 / 270 * bx.w, bx.y + 145 / 480 * bx.h); await p.waitForTimeout(150); }   // the first click asks for fullscreen
+  for (let k = 0; k < 2; k++) { await p.mouse.click(bx.x + 240 / 480 * bx.w, bx.y + 63 / 270 * bx.h); await p.waitForTimeout(150); }   // the first click asks for fullscreen
   v = await p.evaluate(() => window.__climber.view()); ok(v.set.page === 'controls', 'mouse click on CONTROLS opens it (page ' + v.set.page + ')');
   // THEME: ORIGINAL is in use, GAME BOY switches (a reload), and the page comes back with GAME BOY on
   v = await nav({ back: true }); v = await nav({ y: 1 }); v = await nav({ y: 1 }); v = await nav({ jump: true });

@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const p = await b.newPage({ viewport: { width: 540, height: 960 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.route('**/rest/v1/**', r => r.abort());
   await p.goto('file:///home/claude/climber-wide/index.html#unlock'); await p.waitForTimeout(300);
@@ -32,23 +32,23 @@ const { chromium } = require('playwright');
   // springs and gem on a hand-made room
   const sg = await p.evaluate(() => {
     const G = window.__climber; G.manual(true);
-    const rows = []; for (let r = 0; r < 48; r++) { let s = ''; for (let c = 0; c < 27; c++) s += (r === 0 || r >= 46 || c === 0 || c === 26) ? '#' : '.'; rows.push(s); }
+    const rows = []; for (let r = 0; r < 27; r++) { let s = ''; for (let c = 0; c < 48; c++) s += (r === 0 || r >= 25 || c === 0 || c === 47) ? '#' : '.'; rows.push(s); }   // wide: 48 x 27
     const set = (r, c, ch) => rows[r] = rows[r].substring(0, c) + ch + rows[r].substring(c + 1);
-    set(45, 3, 'S'); set(45, 10, 'u'); set(38, 10, 'G'); set(4, 22, 'E');
-    G.load({ format: 1, id: 't', name: 'Springs', difficulty: 1, grid: { cols: 27, rows: 48, tile: 10 }, tiles: rows, entities: [] });
+    set(24, 3, 'S'); set(24, 10, 'u'); set(17, 10, 'G'); set(3, 44, 'E');
+    G.load({ format: 1, id: 't', name: 'Springs', difficulty: 1, grid: { cols: 48, rows: 27, tile: 10 }, tiles: rows, entities: [] });
     const I = (o) => Object.assign({ x: 0, y: 0, jump: false, dash: false, grab: false }, o);
     for (let i = 0; i < 40; i++) G.step(I({}), 1);
     let s, top = 999; for (let i = 0; i < 70; i++) { s = G.step(I({ x: 1 }), 1); if (s.x >= 100) break; }
     for (let i = 0; i < 60; i++) { s = G.step(I({ jump: true }), 1); top = Math.min(top, s.y); }
     const gemAfterBounce = s.gem; for (let i = 0; i < 70; i++) s = G.step(I({ x: 1 }), 1);
-    return { highest: top, floorY: 450, gemFollowing: gemAfterBounce, gemBanked: s.gem && s.ground };
+    return { highest: top, floorY: 240, gemFollowing: gemAfterBounce, gemBanked: s.gem && s.ground };
   });
-  console.log('spring: rose', 450 - sg.highest, 'px (about', Math.round((450 - sg.highest) / 10), 'tiles) | gem picked up in the air:', sg.gemFollowing, '| banked on landing:', sg.gemBanked);
+  console.log('spring: rose', 240 - sg.highest, 'px (about', Math.round((240 - sg.highest) / 10), 'tiles) | gem picked up in the air:', sg.gemFollowing, '| banked on landing:', sg.gemBanked);
   // builder: height toggle
   const p2 = await b.newPage({ viewport: { width: 1400, height: 1000 } });
   await p2.goto('file:///home/claude/climber-wide/builder/index.html'); await p2.waitForTimeout(300);
-  await p2.selectOption('#rows', '96'); await p2.waitForTimeout(200);
-  const bt = await p2.evaluate(() => { const t = JSON.parse(localStorage.getItem('climberwide.builder.draft.v1')).tiles; return [t.length, t[0], t[48], t[95]]; });
+  await p2.selectOption('#rows', '54'); await p2.waitForTimeout(200);
+  const bt = await p2.evaluate(() => { const t = JSON.parse(localStorage.getItem('climberwide.builder.draft.v1')).tiles; return [t.length, t[0], t[27], t[53]]; });
   console.log('builder 2 screens: rows', bt[0], '| top border', bt[1].slice(0, 6), '| old top now open', bt[2].slice(0, 6), '| bottom', bt[3].slice(0, 6));
   await p2.evaluate(() => document.getElementById('g-go').click()); await p2.waitForTimeout(200);
   console.log('auto-built tall room rows:', await p2.evaluate(() => JSON.parse(localStorage.getItem('climberwide.builder.draft.v1')).tiles.length), '|', await p2.locator('#status').innerText());
