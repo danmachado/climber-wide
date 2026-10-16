@@ -245,6 +245,7 @@
     var th = TILE_THEME, sky = th.sky, far = th.far, i, x;
     function D(k) { return !depths || depths.indexOf(k) >= 0; }
     if (D('near')) CITY = null;
+    if (th.scene && typeof SCENES !== 'undefined' && SCENES[th.scene]) { if (D('near')) SKY_SIGNS = []; sceneSky(b, w, h, h0, seed, th.scene, D); return; }   // Brickyard, Icehouse, Furnace (shared-scenes.js)
     if (!sky) { if (D('sky')) { b.fillStyle = th.bg || '#0a0d1c'; b.fillRect(0, 0, w, h); } return; }
     if (D('sky')) {
       var gr = b.createLinearGradient(0, 0, 0, h);

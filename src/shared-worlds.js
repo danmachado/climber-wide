@@ -15,11 +15,11 @@
   // sky is the gradient top to horizon, far is [far band, near band, detail] for the silhouettes, skyline their shape.
   var THEMES = {
     brick: { tiles: 'brick', bg: '#0a0d1c', dot: '#1b2145', back: ['#171e47', '#0f1432', '#262f68'], accent: '#ffb74a', accentLo: '#c47f24',
-      sky: ['#070a16', '#10153a', '#262d66'], far: ['#141a46', '#0b0f2c', '#2d3576'], skyline: 'town' },
+      sky: ['#070a16', '#10153a', '#262d66'], far: ['#141a46', '#0b0f2c', '#2d3576'], skyline: 'town', scene: 'yard' },
     ember: { tiles: 'ember', bg: '#120909', dot: '#3a1714', back: ['#2b1513', '#1b0c0b', '#4a2119'], accent: '#ff8a4a', accentLo: '#c25a24',
-      sky: ['#0b0404', '#1e0a08', '#521c12'], far: ['#26110d', '#110504', '#7a2e1c'], skyline: 'cave' },
+      sky: ['#0b0404', '#1e0a08', '#521c12'], far: ['#26110d', '#110504', '#7a2e1c'], skyline: 'cave', scene: 'forge' },
     frost: { tiles: 'frost', bg: '#07121d', dot: '#16324a', back: ['#12283c', '#0b1a29', '#1f4460'], accent: '#9fe3ff', accentLo: '#5aa3c4',
-      sky: ['#040b14', '#0d2238', '#204d6c'], far: ['#143148', '#091826', '#5a93b6'], skyline: 'peaks' },
+      sky: ['#040b14', '#0d2238', '#204d6c'], far: ['#143148', '#091826', '#5a93b6'], skyline: 'peaks', scene: 'glacier' },
     jungle: { tiles: 'jungle', bg: '#07141a', dot: '#1a3a3c', back: ['#24403a', '#172b26', '#6f9a80', '#3a5c50'], backKind: 'stone', accent: '#ff4fa3', accentLo: '#b8306f',
       sky: ['#1a6a8e', '#38acbc', '#a4ead6'], far: ['#4f9f8c', '#3f8a78', '#86c9b4'], skyline: 'pyramid',
       // the ruined back wall (ruinsBack/ruinsFront in shared-tiles.js): each nearer layer a step darker

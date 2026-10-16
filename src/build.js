@@ -1,5 +1,5 @@
 var fs = require('fs'), d = __dirname;
-var tilesJs = fs.readFileSync(d + '/shared-tiles.js', 'utf8'), gen = fs.readFileSync(d + '/gen.js', 'utf8'), cfg = fs.readFileSync(d + '/shared-config.js', 'utf8'), heroJs = fs.readFileSync(d + '/shared-hero.js', 'utf8'), worldsJs = fs.readFileSync(d + '/shared-worlds.js', 'utf8'), foesJs = fs.readFileSync(d + '/shared-foes.js', 'utf8'), screenJs = fs.readFileSync(d + '/shared-screen.js', 'utf8');
+var tilesJs = fs.readFileSync(d + '/shared-tiles.js', 'utf8') + '\n' + fs.readFileSync(d + '/shared-scenes.js', 'utf8'), gen = fs.readFileSync(d + '/gen.js', 'utf8'), cfg = fs.readFileSync(d + '/shared-config.js', 'utf8'), heroJs = fs.readFileSync(d + '/shared-hero.js', 'utf8'), worldsJs = fs.readFileSync(d + '/shared-worlds.js', 'utf8'), foesJs = fs.readFileSync(d + '/shared-foes.js', 'utf8'), screenJs = fs.readFileSync(d + '/shared-screen.js', 'utf8');
 var generateRoom = new Function(screenJs + '\n' + gen + '\nreturn generateRoom;')();
 
 // Built-in starter set: the hand-made first room plus generated rooms (each one is cleared by the auto-player in tests).
