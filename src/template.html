@@ -2762,7 +2762,7 @@
     }
     return { x: x0, y: y, w: W, h: H };
   }
-  var MLAY = { slabRow: 9, slabH: 4, slabW: 18, slabCols: [4, 26], blockRow: 14, block: 4, blockCols: [16, 22, 28], signRow: 19, signRows: 3, signCols: [8, 39], floorRow: 24 };
+  var MLAY = { slabRow: 9, slabH: 4, slabW: 18, slabCols: [4, 26], blockRow: 14, block: 4, blockCols: [16, 22, 28], floorRow: 24 };
   var menuArt = { key: '', cv: null };
   function menuWorld() { return Math.max(0, Math.min(WORLDS.length - 1, sel.w | 0)); }
   function menuGrid() {                              // the menu as a room grid: '#' terrain, 'b' backdrop, '.' open
@@ -2770,7 +2770,6 @@
     for (r = 0; r < rows; r++) { g.push([]); for (c = 0; c < cols; c++) g[r].push(r >= MLAY.floorRow ? '#' : '.'); }
     MLAY.slabCols.forEach(function (c0) { for (r = 0; r < MLAY.slabH; r++) for (c = 0; c < MLAY.slabW; c++) g[MLAY.slabRow + r][c0 + c] = '#'; });
     MLAY.blockCols.forEach(function (c0) { for (r = 0; r < MLAY.block; r++) for (c = 0; c < MLAY.block; c++) g[MLAY.blockRow + r][c0 + c] = '#'; });
-    for (r = 0; r < MLAY.signRows; r++) for (c = MLAY.signCols[0]; c <= MLAY.signCols[1]; c++) g[MLAY.signRow + r][c] = 'b';
     return g;
   }
   function buildMenuArt() {
@@ -2780,7 +2779,7 @@
     setTileTheme(th); GB.live = false;
     var cv = document.createElement('canvas'); cv.width = LW; cv.height = LH; var b = cv.getContext('2d');
     var at = function (cc, rr) { return rr < 0 || rr >= rows || cc < 0 || cc >= cols ? '#' : g[rr][cc]; };
-    var wallAt = function (cc, rr) { return at(cc, rr) === '#'; }, backAt = function (cc, rr) { return at(cc, rr) !== '.'; };
+    var wallAt = function (cc, rr) { return at(cc, rr) === '#'; };
     drawSky(b, LW, LH, LH, skyHash('menu/' + w), null, null);
     gbSnap([cv], 'back');
     var wl = document.createElement('canvas'); wl.width = LW; wl.height = LH; var wb = wl.getContext('2d');
@@ -2789,8 +2788,7 @@
     gbSnap([wl], 'wall');
     if (!GB.on) { b.save(); b.globalAlpha = 0.55; b.filter = 'brightness(0)'; b.drawImage(wl, 3, 3); b.restore(); }   // a cast shadow, so the terrain lifts off the busy scene
     b.drawImage(wl, 0, 0);
-    var lamps = gbStage(b, 'deco', function (d) { return drawDecals(d, cols, rows, function (cc, rr) { var ch = at(cc, rr); return ch === 'b' ? '.' : ch; }, skyHash('menu/' + w)); });
-    gbStage(b, 'back', function (d) { for (r = 0; r < rows; r++) for (c = 0; c < cols; c++) if (g[r][c] === 'b') drawBack(d, c * T, r * T, backAt, c, r); });   // the sign board goes on last, clear of decals
+    var lamps = gbStage(b, 'deco', function (d) { return drawDecals(d, cols, rows, at, skyHash('menu/' + w)); });
     for (var i = 0; i < lamps.length; i++) drawGlow(b, lamps[i].x, lamps[i].y, 20, DECAL_GLOW[th.tiles] || DECAL_GLOW.brick, 0.26);
     setTileTheme(oldTheme); GB.live = live;
     menuArt = { key: key, cv: cv };
@@ -2824,14 +2822,8 @@
         for (var r = 0; r < ih; r++) for (k = 0; k < iw; k++) if (ic[r].charAt(k) === '#') box(ix + k * 2, iy + r * 2, 2, 2, on2 ? ACC : DIM); }
       hits.push({ x: bx, y: by, w: bs, h: bs, fn: hit(i) });
     }
-    // the sign: what the chosen button does (a note from reload or exit takes its place)
-    var sx0 = MLAY.signCols[0] * T, sx1 = (MLAY.signCols[1] + 1) * T, sy = MLAY.signRow * T, shh = MLAY.signRows * T;
-    box(sx0 + 3, sy + 3, sx1 - sx0 - 6, shh - 6, 'rgba(5,7,14,0.55)');
-    var lines = wrapText(hudClean(menuNote || MENU[sel.menu][1]), 44), ly = sy + 7;
-    if (!menuNote && sel.menu >= MENU_BIG) { pxText(MENU[sel.menu][0], MX, ly, 1, ACC, 'center'); ly += 10; }
-    else if (lines.length < 2) ly += 5;
-    for (i = 0; i < lines.length && i < 2; i++) pxText(lines[i], MX, ly + i * 10, 1, menuNote ? ACC : C.text, 'center');
-    pxText(usedPad ? 'ARROWS CHOOSE - JUMP STARTS' : 'ARROWS CHOOSE - C STARTS - OR CLICK', MX, MLAY.floorRow * T + (GB.on ? -12 : 16), 1, DIM, 'center');   // GAME BOY: the floor is the darkest shade, so the hint sits above it
+    // no descriptions or hints (Dan, Oct 2026: the buttons speak for themselves); only a note from reload or exit shows, just above the floor
+    if (menuNote) pxText(hudClean(menuNote), MX, MLAY.floorRow * T - 12, 1, ACC, 'center');
   }
   // Reload asks the server for a fresh copy first, so a new build shows up without clearing anything by hand.
   function reloadGame() {
