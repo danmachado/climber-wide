@@ -24,7 +24,7 @@ const { chromium } = require('playwright');
   ok(v.set.note.indexOf('SCREEN SHAKE') === 0 && before !== after, 'SHAKE toggles and saves (' + before + ' -> ' + after + ')');
   await shot('3-graphics');
   v = await nav({ jump: true }); ok(v.set.note === 'SCREEN SHAKE ON' || before === after, 'SHAKE toggles back');
-  v = await nav({ y: -1 }); v = await nav({ y: -1 }); ok(v.set.row === 4, 'up from the top row wraps to BACK');
+  v = await nav({ y: -1 }); v = await nav({ y: -1 }); ok(v.set.row === 5, 'up from the top row wraps to BACK');   // six rows now: PARALLAX joined the page
   v = await nav({ jump: true }); ok(v.set.page === 'top' && v.set.row === 1, 'BACK row returns to the list on GRAPHICS');
   v = await nav({ back: true }); ok(v.scene === 'menu', 'back from the list returns to the menu');
   // the mouse: click CONTROLS on the list

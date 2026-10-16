@@ -13,6 +13,7 @@
   #stage { position: relative; background: #0a0d1c; overflow: hidden; }
   #fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
   #world { position: absolute; left: 0; top: 0; width: 100%; will-change: transform; }
+  .para { position: absolute; left: 0; top: 0; will-change: transform; pointer-events: none; }
   #stage canvas { position: absolute; display: block; image-rendering: pixelated; }
 </style>
 </head>
@@ -306,21 +307,30 @@
   // L.nearWin: its windows; L.cables: the overhead cables; L.rain: the baked rain (the front layer). Without L every
   // depth is painted straight into b, which is what the builder does. Either way the picture is the same.
   var CITY = null;                                         // what the game can bring to life (set by drawSky for the towers skyline)
-  function drawSky(b, w, h, h0, seed, L) {
+  // depths (optional): a list of the depths to paint, for the game's parallax layers. 'sky' is the gradient, stars,
+  // clouds and the beam tower; 'far' the farther silhouette (the city's haze and middle rows, the Temple's canopy);
+  // 'near' the nearer silhouette (the city's near row, street glow, signs and cables; the Temple's pyramid); 'front'
+  // what sits at the terrain's own depth (rain, stalactites, the Temple's ruined walls). Each call paints its depths
+  // at the size it is given, so a far layer can be shorter than the room and scroll slower. Without it (the builder,
+  // the frame's fast mode) every depth goes into b at once and the picture is the old one.
+  function drawSky(b, w, h, h0, seed, L, depths) {
     var th = TILE_THEME, sky = th.sky, far = th.far, i, x;
-    CITY = null;
-    if (!sky) { b.fillStyle = th.bg || '#0a0d1c'; b.fillRect(0, 0, w, h); return; }
-    var gr = b.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, sky[0]); gr.addColorStop(Math.max(0, 1 - h0 / h), sky[1]); gr.addColorStop(1, sky[2]);
-    b.fillStyle = gr; b.fillRect(0, 0, w, h);
+    function D(k) { return !depths || depths.indexOf(k) >= 0; }
+    if (D('near')) CITY = null;
+    if (!sky) { if (D('sky')) { b.fillStyle = th.bg || '#0a0d1c'; b.fillRect(0, 0, w, h); } return; }
+    if (D('sky')) {
+      var gr = b.createLinearGradient(0, 0, 0, h);
+      gr.addColorStop(0, sky[0]); gr.addColorStop(Math.max(0, 1 - h0 / h), sky[1]); gr.addColorStop(1, sky[2]);
+      b.fillStyle = gr; b.fillRect(0, 0, w, h);
+    }
     var s = (Math.abs(seed) % 2147483646) + 1;             // keep the generator in range, or widths could go negative
     function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647; }
     function between(a, c) { return a + Math.floor(rnd() * (c - a + 1)); }
     b.fillStyle = th.dot;                                   // stars (embers in the Furnace), only in the open sky; the Temple is daylight
-    for (i = 0; i < (th.ruins ? 0 : 70) * (h / 480); i++) { var sx = Math.floor(rnd() * w), sy = Math.floor(rnd() * (h - h0 * 0.45)); b.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1); }
+    for (i = 0; i < (th.ruins ? 0 : 70) * (h / 480); i++) { var sx = Math.floor(rnd() * w), sy = Math.floor(rnd() * (h - h0 * 0.45)); if (D('sky')) b.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1); }
     if (!far) return;
     var kind = th.skyline || 'town';
-    SKY_SIGNS = [];
+    if (D('near')) SKY_SIGNS = [];
     // heights(top) builds a one-pixel-column heightmap for one band whose tallest point is about top pixels
     function heights(top) {
       var hm = [], seg, hh, x0, px;
@@ -375,7 +385,7 @@
       near: { body: '#3e3079', hi: '#4d3e8c', lo: '#30245f', pane: '#382b70', win: ['#ffd27a', '#7fe9ff'], winA: 0.9, rimL: 'rgba(86,216,238,0.3)', rimR: 'rgba(255,90,190,0.16)' },
       beam: ['rgba(214,204,250,0.18)', 'rgba(232,226,255,0.22)'], cloud: 'rgba(255,255,255,0.07)'
     };
-    if (kind === 'towers') {                                 // one pale beam tower far back, and two soft cloud bands
+    if (kind === 'towers' && D('sky')) {                     // one pale beam tower far back, and two soft cloud bands
       var bx = between(60, w - 60), bw = between(8, 14), bh = Math.round(h0 * 0.9);
       b.fillStyle = CP.beam[0]; b.fillRect(bx, h - bh, bw, bh); b.fillStyle = CP.beam[1]; b.fillRect(bx + 2, h - bh, bw - 4, bh);
       b.fillStyle = CP.cloud; for (i = 0; i < 2; i++) { var cy = Math.round(h - h0 * (0.5 + i * 0.3)), cx = between(0, w / 2), cwid = between(60, 150); b.fillRect(cx, cy, cwid, 2); b.fillRect(cx + 10, cy - 2, cwid - 30, 2); }
@@ -426,28 +436,33 @@
         }
         return blds;
       }
-      var Lf = L ? L.far : b, Lfw = L ? L.farWin : b, Ln = L ? L.near : b, Lnw = L ? L.nearWin : b, Lc = L ? L.cables : b;
-      var winFloors = [];
-      cityRow(Lf, Lf, CP.haze, Math.round(h0 * 0.8), 2, 6, 3, false, false, false, null);
-      var mid = cityRow(Lf, Lfw, CP.mid, Math.round(h0 * 0.95), 4, 10, 4, true, true, true, winFloors), nMid = winFloors.length;
-      var near = cityRow(Ln, Lnw, CP.near, Math.round(h0 * 1.05), 8, 16, 4, true, true, true, winFloors);
-      for (i = 0; i < near.length; i++) {                    // street level: a warm haze at the foot of every gap, and a sign on some faces
-        var nb = near[i], gx = nb[0] + nb[1];
-        if (i + 1 < near.length) { var gw = near[i + 1][0] - gx; drawGlow(Ln, gx + gw / 2, h, 14 + gw, '255,170,90', 0.22); Ln.fillStyle = '#ffd27a'; Ln.fillRect(gx + Math.floor(gw / 2), h - 18, 1, 1); Ln.fillStyle = '#2a2240'; Ln.fillRect(gx + Math.floor(gw / 2), h - 17, 1, 17); }
-        if (nb[1] >= 24 && rnd() < 0.7) SKY_SIGNS.push([nb[0] + between(2, nb[1] - 22), h - between(14, nb[2] - 10), rnd() < 0.35]);
+      var Lf = L && L.far ? L.far : b, Lfw = L && L.farWin ? L.farWin : b, Ln = L && L.near ? L.near : b, Lnw = L && L.nearWin ? L.nearWin : b, Lc = L && L.cables ? L.cables : b;
+      var winFloors = [], mid = [], nMid = 0, near = [], cables = [];
+      if (D('far')) {
+        cityRow(Lf, Lf, CP.haze, Math.round(h0 * 0.8), 2, 6, 3, false, false, false, null);
+        mid = cityRow(Lf, Lfw, CP.mid, Math.round(h0 * 0.95), 4, 10, 4, true, true, true, winFloors); nMid = winFloors.length;
       }
-      var cables = [];                                       // overhead cables sagging across the alley; one may carry a string of bulbs
-      for (i = 0; i < 4; i++) { var cy0 = between(Math.round(h0 * 0.1), Math.round(h0 * 0.6)), cy1 = cy0 + between(-30, 30), sag = between(6, 18); cables.push({ y0: cy0, y1: cy1, sag: sag, bulbs: false, ph: between(0, 999), period: between(34, 52) }); }
-      if (rnd() < 0.7) cables[between(0, 3)].bulbs = true;
-      for (i = 0; i < cables.length; i++) drawCable(Lc, cables[i], 0, w);
-      var tallest = 0; for (i = 0; i < mid.length; i++) tallest = Math.max(tallest, mid[i][2]);
-      CITY = { floors: winFloors, nMid: nMid, cables: cables, w: w, h: h, h0: h0, cityTop: h - tallest, near: near, mid: mid };
+      if (D('near')) {
+        near = cityRow(Ln, Lnw, CP.near, Math.round(h0 * 1.05), 8, 16, 4, true, true, true, winFloors);
+        for (i = 0; i < near.length; i++) {                  // street level: a warm haze at the foot of every gap, and a sign on some faces
+          var nb = near[i], gx = nb[0] + nb[1];
+          if (i + 1 < near.length) { var gw = near[i + 1][0] - gx; drawGlow(Ln, gx + gw / 2, h, 14 + gw, '255,170,90', 0.22); Ln.fillStyle = '#ffd27a'; Ln.fillRect(gx + Math.floor(gw / 2), h - 18, 1, 1); Ln.fillStyle = '#2a2240'; Ln.fillRect(gx + Math.floor(gw / 2), h - 17, 1, 17); }
+          if (nb[1] >= 24 && rnd() < 0.7) SKY_SIGNS.push([nb[0] + between(2, nb[1] - 22), h - between(14, nb[2] - 10), rnd() < 0.35]);
+        }
+        // overhead cables sagging across the alley; one may carry a string of bulbs
+        for (i = 0; i < 4; i++) { var cy0 = between(Math.round(h0 * 0.1), Math.round(h0 * 0.6)), cy1 = cy0 + between(-30, 30), sag = between(6, 18); cables.push({ y0: cy0, y1: cy1, sag: sag, bulbs: false, ph: between(0, 999), period: between(34, 52) }); }
+        if (rnd() < 0.7) cables[between(0, 3)].bulbs = true;
+        for (i = 0; i < cables.length; i++) drawCable(Lc, cables[i], 0, w);
+        var tallest = 0; for (i = 0; i < mid.length; i++) tallest = Math.max(tallest, mid[i][2]); for (i = 0; i < near.length; i++) tallest = Math.max(tallest, near[i][2]);
+        CITY = { floors: winFloors, nMid: nMid, cables: cables, w: w, h: h, h0: h0, cityTop: h - tallest, near: near, mid: mid };   // mid is empty when the far rows were painted elsewhere (parallax)
+      }
     } else {
-      if (th.ruins) ruinsBack(b, w, h, h0, rnd, between, th.ruins);
-      band(far[0], Math.round(h0 * 0.34), far[2]);
-      band(far[1], Math.round(h0 * 0.2), kind === 'cave' ? far[2] : null);
-      if (th.ruins) ruinsFront(b, w, h, h0, rnd, between, th.ruins);
+      if (th.ruins) ruinsBack(b, w, h, h0, rnd, between, th.ruins, D('sky'), D('far'));
+      if (D('far')) band(far[0], Math.round(h0 * 0.34), far[2]); else heights(Math.round(h0 * 0.34));   // keep the seed stream in step
+      if (D('near')) band(far[1], Math.round(h0 * 0.2), kind === 'cave' ? far[2] : null); else heights(Math.round(h0 * 0.2));
+      if (th.ruins && D('front')) ruinsFront(b, w, h, h0, rnd, between, th.ruins);
     }
+    if (!D('front')) return;
     if (kind === 'towers') {                                 // baked rain: thin diagonal streaks at two densities, still, like a held frame
       var Lr = L ? L.rain : b;
       Lr.fillStyle = 'rgba(200,220,255,0.10)';
@@ -486,13 +501,15 @@
   function ruinsOval(b, cx, cy, rx, ry) {                   // a crisp pixel ellipse, row by row
     for (var y = -ry; y <= ry; y++) { var hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry)))); if (hw > 0) b.fillRect(cx - hw, cy + y, hw * 2, 1); }
   }
-  function ruinsBack(b, w, h, h0, rnd, between, R) {
+  function ruinsBack(b, w, h, h0, rnd, between, R, clouds, trees) {   // clouds and trees: which parts to paint (both, unless told)
     var i, x;
+    if (clouds === undefined) { clouds = true; trees = true; }
     b.fillStyle = R.cloud;                                  // soft cloud banks, a few per screen, brighter on top
     for (i = 0; i < Math.round(4 * h / 480); i++) {
       var cy = between(8, Math.max(9, h - Math.round(h0 * 0.45))), cx = between(-20, w), cw = between(18, 40);
-      for (var k = 0; k < 4; k++) ruinsOval(b, cx + k * Math.round(cw * 0.55) - cw, cy - (k % 2) * 4, Math.round(cw * (0.5 + rnd() * 0.4)), between(4, 8));
+      for (var k = 0; k < 4; k++) { var orx = Math.round(cw * (0.5 + rnd() * 0.4)), ory = between(4, 8); if (clouds) ruinsOval(b, cx + k * Math.round(cw * 0.55) - cw, cy - (k % 2) * 4, orx, ory); }
     }
+    if (!trees) return;
     for (var row = 0; row < 2; row++) {                     // two rows of round treetops, the far one paler and higher
       var base = Math.round(h0 * (row ? 0.3 : 0.44)), hm = [];
       for (x = 0; x < w; x++) hm[x] = base;
@@ -2202,6 +2219,18 @@
   var CW = 48, CH = 45, chunks = [], dirtyNow = [], dirtyPrev = [], allDirty = true, chunkCopies = 0;   // chunkCopies: a running count, for measuring what an effect costs
   // The chunks live in a "world" layer as tall as the room. A tall room scrolls by sliding that layer with a
   // transform (no repainting), the same cheap move the screen shake uses.
+  // ---- parallax: the sky and the far and near silhouettes on their own layers behind the room, each sliding at
+  // its own rate as the camera climbs a tall room, plus a small lead with the hero in every room, so the backdrop
+  // has depth. The terrain (walls, backdrop, decals, rain, the Temple's walls, Neon Row's near row) stays in the
+  // chunk layer at full rate. Off in the fast mode (GAME BOY and BLACK AND WHITE) and in Settings, GRAPHICS, where
+  // the game draws exactly the old single static picture.
+  var PARA_KEY = 'climberwide.para.v1', para = { on: true, S: 20, layers: [], hx: 0.5, hy: 0.5 };
+  var PARA_RATES = { sky: 0.06, far: 0.3, near: 0.55 };
+  try { para.on = localStorage.getItem(PARA_KEY) !== '0'; } catch (e) {}
+  if (GB.on) para.on = false;
+  function setPara(on) { para.on = on; try { localStorage.setItem(PARA_KEY, on ? '1' : '0'); } catch (e) {} if (tileLayer) { buildChunks(); drawTileLayer(); layout(); } }
+  function paraSize(r) { var m = para.S * (1 - r); return { w: LW + m, h: LH + (RH - LH) * r + m, m: m }; }   // a layer's own size: shorter than the room by its rate, with a margin for the lead
+  function clearPara() { for (var i = 0; i < para.layers.length; i++) stage.removeChild(para.layers[i].cv); para.layers = []; }
   var world = document.createElement('div'); world.id = 'world'; stage.appendChild(world);
   // ---- weather: a few dim, slow flecks (dust, snow, embers) on one screen-sized layer above the room ----
   // The only effect with a per-frame cost: one small clear and about twenty one-pixel draws, on its own canvas so the
@@ -2247,7 +2276,9 @@
     chunks = [];
     for (var cy = 0; cy < RH / CH; cy++) for (var cx = 0; cx < LW / CW; cx++) {
       var c = makeCanvas(CW, CH); world.appendChild(c);
-      chunks.push({ c: c, g: c.getContext('2d', { alpha: false }), x: cx * CW, y: cy * CH });
+      var cg = c.getContext('2d', { alpha: para.on });
+      if (para.on) cg.globalCompositeOperation = 'copy';            // the room has holes where the sky shows through: each copy replaces the chunk whole
+      chunks.push({ c: c, g: cg, x: cx * CW, y: cy * CH });
     }
   }
   function setRoomHeight(hh) {
@@ -2261,6 +2292,20 @@
     else { var t = camTarget(); cam.y += Math.abs(t - cam.y) < 1 ? t - cam.y : (t - cam.y) * 0.18; }
     var shown = Math.round(cam.y * view.scale) / (window.devicePixelRatio || 1);
     if (shown !== cam.shown) { cam.shown = shown; world.style.transform = 'translateY(' + (-shown) + 'px)'; }
+    if (para.layers.length) placePara();
+  }
+  function placePara() {
+    // The lead: where the hero stands on screen, eased. The terrain is pinned, so a layer drifts the hero's way by
+    // (1 - rate) of the lead and the farthest layers move the most, the way a camera panning after him would show them.
+    var tx = Math.max(0, Math.min(1, (pl.x + pl.w / 2) / LW)), ty = Math.max(0, Math.min(1, (pl.y + pl.h / 2 - cam.y) / LH));
+    if (para.snap) { para.hx = tx; para.hy = ty; para.snap = false; } else { para.hx += (tx - para.hx) * 0.08; para.hy += (ty - para.hy) * 0.08; }
+    var k = view.scale / (window.devicePixelRatio || 1), i;
+    for (i = 0; i < para.layers.length; i++) {
+      var L = para.layers[i], m = L.m, x = -m / 2 + (para.hx - 0.5) * m, y = -m / 2 - cam.y * L.r + (para.hy - 0.5) * m, dpr2 = window.devicePixelRatio || 1;
+      if (L.sized !== view.scale) { L.sized = view.scale; L.cv.style.width = (Math.round(L.cv.width * view.scale) / dpr2) + 'px'; L.cv.style.height = (Math.round(L.cv.height * view.scale) / dpr2) + 'px'; }
+      var sx = Math.round(x * view.scale) / dpr2, sy = Math.round(y * view.scale) / dpr2;
+      if (sx !== L.sx || sy !== L.sy) { L.sx = sx; L.sy = sy; L.cv.style.transform = 'translate(' + sx + 'px,' + sy + 'px)'; }
+    }
   }
   var TOP_H = 30, BOT_H = 0; // HUD strips, in game pixels. The top bar is 17 deep at the sides and 28 in the middle (HB), the rest is transparent.
   var HB = { side: 17, deep: 28, cl: MX - 43, cr: MX + 43, ch: 8 };   // the top bar's outline: the middle panel runs cl to cr and drops to deep with ch-wide chamfers
@@ -2311,6 +2356,7 @@
     hud.width = bw; hud.height = Math.round(bw * LH / LW);
     var u = bw / LW, i, px = function (v) { return Math.round(v * s) / dpr; };
     world.style.height = px(RH) + 'px'; cam.shown = -1;
+    for (i = 0; i < para.layers.length; i++) { para.layers[i].sized = null; para.layers[i].sx = para.layers[i].sy = null; }   // resized and placed again on the next frame
     for (i = 0; i < chunks.length; i++) {
       var ch = chunks[i], st = ch.c.style;
       st.left = px(ch.x) + 'px'; st.top = px(ch.y) + 'px';
@@ -2393,10 +2439,10 @@
     // Read the layers back through a throwaway canvas: reading a canvas directly can move it off the GPU for good,
     // which makes every later draw from it slow on the frame.
     function alphaOf(cv) { var t = document.createElement('canvas'); t.width = LW; t.height = RH; var tg = t.getContext('2d', { willReadFrequently: true }); tg.drawImage(cv, 0, 0); return tg.getImageData(0, 0, LW, RH).data; }
-    var fa = alphaOf(CL.front), na = alphaOf(CL.near), ra = alphaOf(CL.far), i, y, x;
+    var fa = alphaOf(CL.front), na = alphaOf(CL.near), ra = CL.far ? alphaOf(CL.far) : null, i, y, x;
     c.occ = new Uint8Array(LW * RH);
     var hid = 0;
-    for (i = 0; i < LW * RH; i++) { c.occ[i] = fa[i * 4 + 3] === 255 ? 3 : (na[i * 4 + 3] === 255 ? 2 : (ra[i * 4 + 3] >= 200 ? 1 : 0)); if (c.occ[i] === 3) hid++; }   // 3 terrain, 2 near row, 1 far rows, 0 sky
+    for (i = 0; i < LW * RH; i++) { c.occ[i] = fa[i * 4 + 3] === 255 ? 3 : (na[i * 4 + 3] === 255 ? 2 : (ra && ra[i * 4 + 3] >= 200 ? 1 : 0)); if (c.occ[i] === 3) hid++; }   // 3 terrain, 2 near row, 1 far rows, 0 sky
     if (hid > LW * RH * 0.97) c.occ.fill(0);                              // a browser that reads canvases back as solid (some privacy modes do) would hide everything: treat it all as open
     function open(yy, hh, lvl) { var n = 0; for (x = 0; x < LW; x++) { var ok = true; for (var k = 0; k < hh && ok; k++) if (c.occ[(yy + k) * LW + x] >= lvl) ok = false; if (ok) n++; } return n; }
     function lanes(depth, lvl, hh, count, y0, y1, speed) {
@@ -2411,7 +2457,7 @@
     }
     var top = Math.max(D.h - D.h0 * 1.05, D.cityTop - 20, 14), bottom = D.h - 26;   // down among the buildings
     lanes('@mid', 2, 6, 4, top, bottom, [13, 6]);
-    lanes('@far', 1, 1, 3, top, bottom, [6, 4]);
+    if (CL.far) lanes('@far', 1, 1, 3, top, bottom, [6, 4]);                   // the far cars fly among the far rows; with parallax those rows are a still layer behind (no far cars yet)
     // steam: off a few rooftops (middle and near rows) and up out of the street between the near buildings
     var vents = [], sp;
     function vent(x, yy, depth) { if (yy > 16 && x > 3 && x < LW - 4 && cityVisible([x - 2, yy - 13, 5, 11], DEPTH_LVL[depth], c)) vents.push({ x: x, y: yy, depth: depth }); }
@@ -2440,7 +2486,7 @@
     for (var i = 0; i < CITY_ORDER.length; i++) {
       var k = CITY_ORDER[i];
       if (k.charAt(0) === '@') { if (withMovers) for (var j = 0; j < city.movers.length; j++) if (city.movers[j].depth === k) drawMover(ctx, city.movers[j]); }
-      else ctx.drawImage(city.L[k], x, y, w, hh, x, y, w, hh);
+      else if (city.L[k]) ctx.drawImage(city.L[k], x, y, w, hh, x, y, w, hh);   // with parallax the sky and far rows live on their own layers behind
     }
     ctx.restore();
   }
@@ -2497,6 +2543,7 @@
     var x = Math.max(0, Math.floor(r[0])), y = Math.max(0, Math.floor(r[1])), w = Math.min(LW, Math.ceil(r[0] + r[2])) - x, hh = Math.min(RH, Math.ceil(r[1] + r[3])) - y;
     if (w <= 0 || hh <= 0) return;
     cityCompose(tileLayer.getContext('2d'), x, y, w, hh, true);
+    if (para.on) g.clearRect(x, y, w, hh);
     g.drawImage(tileLayer, x, y, w, hh, x, y, w, hh);
     if (show) mark(x, y, w, hh);
   }
@@ -2585,16 +2632,29 @@
     tileLayer.width = LW; tileLayer.height = RH; allDirty = true;
     var b = tileLayer.getContext('2d'), tb = b, r, c, i, CL = null;
     city = null; GB.live = false;                                         // GAME BOY: the static layer is drawn in full colour, then snapped (gbSnap)
-    if (themeOf(room).skyline === 'towers' && !GB.on) {                   // Neon Row: the city is painted in depth layers so a few things can move in it
-      CL = {}; ['sky', 'far', 'farWin', 'near', 'nearWin', 'cables', 'front'].forEach(function (k) { var cv = document.createElement('canvas'); cv.width = LW; cv.height = RH; CL[k] = cv; });
+    var seed0 = skyHash((room.name || '') + '/' + (room.world | 0) + '/' + (room.level | 0)), towers = themeOf(room).skyline === 'towers' && !GB.on;
+    clearPara();
+    if (para.on) {                                                        // the sky and the silhouettes go behind the room on their own layers
+      ['sky', 'far', 'near'].forEach(function (k) {
+        if (towers && k === 'near') return;                               // Neon Row's near row stays in the room (its signs, cables and traffic live there)
+        var r2 = PARA_RATES[k], sz = paraSize(r2), cv = document.createElement('canvas'); cv.width = sz.w; cv.height = sz.h; cv.className = 'para';
+        var ctx = cv.getContext('2d'), Lk = k === 'far' && towers ? { far: ctx, farWin: ctx } : null;
+        drawSky(ctx, sz.w, sz.h, LH, seed0, Lk, [k]);
+        stage.insertBefore(cv, world); para.layers.push({ k: k, r: r2, m: sz.m, cv: cv, sx: null, sy: null });
+      });
+      para.snap = true;
+    }
+    if (towers) {                                                         // Neon Row: the city is painted in depth layers so a few things can move in it
+      CL = {}; (para.on ? ['near', 'nearWin', 'cables', 'front'] : ['sky', 'far', 'farWin', 'near', 'nearWin', 'cables', 'front']).forEach(function (k) { var cv = document.createElement('canvas'); cv.width = LW; cv.height = RH; CL[k] = cv; });
       b = CL.front.getContext('2d');
-      drawSky(CL.sky.getContext('2d'), LW, RH, LH, skyHash((room.name || '') + '/' + (room.world | 0) + '/' + (room.level | 0)),
+      if (para.on) drawSky(b, LW, RH, LH, seed0, { near: CL.near.getContext('2d'), nearWin: CL.nearWin.getContext('2d'), cables: CL.cables.getContext('2d'), rain: b }, ['near', 'front']);
+      else drawSky(CL.sky.getContext('2d'), LW, RH, LH, seed0,
               { far: CL.far.getContext('2d'), farWin: CL.farWin.getContext('2d'), near: CL.near.getContext('2d'), nearWin: CL.nearWin.getContext('2d'), cables: CL.cables.getContext('2d'), rain: b });
-    } else drawSky(b, LW, RH, LH, skyHash((room.name || '') + '/' + (room.world | 0) + '/' + (room.level | 0)));
+    } else drawSky(b, LW, RH, LH, seed0, null, para.on ? ['front'] : null);
     var wallAt = function (cc, rr) { return rr < 0 || rr >= rows || cc < 0 || cc >= cols || grid[rr][cc] === 1 || grid[rr][cc] === 2; };
     var backAt = function (cc, rr) { return wallAt(cc, rr) || !!backs[rr * cols + cc]; };
     for (r = 0; r < rows; r++) for (c = 0; c < cols; c++) if (backs[r * cols + c]) drawBack(b, c * T, r * T, backAt, c, r);
-    if (CL) gbSnap(['sky', 'far', 'farWin', 'near', 'nearWin', 'cables', 'front'].map(function (k) { return CL[k]; }), 'back'); else gbSnap([tileLayer], 'back');
+    if (CL) gbSnap(['sky', 'far', 'farWin', 'near', 'nearWin', 'cables', 'front'].map(function (k) { return CL[k]; }).filter(function (cv) { return !!cv; }), 'back'); else gbSnap([tileLayer], 'back');
     var wl = document.createElement('canvas'), wb;                        // walls on their own layer: roughen() clears chips to transparent
     wl.width = LW; wl.height = RH; wb = wl.getContext('2d');
     var il = wl, ib = wb;                                                  // GAME BOY: ice gets its own layer and lighter shades, so it still reads as ice
@@ -2656,6 +2716,7 @@
       drawWeather();
       return;
     }
+    if (para.on) g.clearRect(0, 0, LW, RH);                          // the static picture has holes where the sky shows through
     g.drawImage(tileLayer, 0, 0);
     if (city) cityStep();
     if (signs.length) stepSigns();
@@ -2730,7 +2791,7 @@
       if (rf.shown !== on) { rf.shown = on; mark(rf.x - 2, rf.y - 2, 12, 12); }
       g.fillStyle = on ? C.teal : C.tealDim;
       g.fillRect(cx - 1, cy - 4, 2, 8); g.fillRect(cx - 3, cy - 2, 6, 4);
-      if (!on) g.drawImage(tileLayer, cx - 1, cy - 2, 2, 4, cx - 1, cy - 2, 2, 4);
+      if (!on) { if (para.on) g.clearRect(cx - 1, cy - 2, 2, 4); g.drawImage(tileLayer, cx - 1, cy - 2, 2, 4, cx - 1, cy - 2, 2, 4); }
     }
     for (i = 0; i < springs.length; i++) { var sq = springs[i]; drawSpring(g, sq.x, sq.y, sq.t > 0); if (sq.t > 0) mark(sq.x, sq.y - 4, T, T + 4); }
     for (i = 0; i < gems.length; i++) {
@@ -3624,7 +3685,7 @@
     top: { title: 'SETTINGS', rows: [['controls', 'CONTROLS', 'BUTTONS AND CONTROLLER SETUP'], ['graphics', 'GRAPHICS', 'EFFECTS AND THE SPEED READOUT'], ['theme', 'THEME', 'ORIGINAL, GAME BOY OR BLACK AND WHITE'], ['back', 'BACK', 'BACK TO THE MENU']] },
     theme: { title: 'THEME', rows: [['t-original', 'ORIGINAL', 'THE GAME IN FULL COLOUR'], ['t-gb', 'GAME BOY', 'FOUR GREENS. THE FAST MODE FOR THE FRAME'], ['t-bw', 'BLACK AND WHITE', 'GAME BOY FLIPPED FOR NIGHT. ALSO FAST'], ['back', 'BACK', 'BACK TO SETTINGS']] },
     controls: { title: 'CONTROLS', rows: ACTIONS.map(function (a) { return [a[0], a[1], 'act']; }).concat([['redo', 'REDO SETUP', 'LEARN WHICH BUTTON IS WHICH AGAIN'], ['reset', 'RESET BUTTONS', 'BACK TO THE STARTING JOBS'], ['back', 'BACK', 'BACK TO SETTINGS']]) },
-    graphics: { title: 'GRAPHICS', rows: [['fx', 'PARTICLES', 'WEATHER DRAWN OVER THE ROOM'], ['shake', 'SHAKE', 'A SMALL KICK ON HARD LANDINGS AND HITS'], ['city', 'CITY LIFE', 'WINDOWS TRAFFIC AND STEAM IN NEON ROW'],
+    graphics: { title: 'GRAPHICS', rows: [['fx', 'PARTICLES', 'WEATHER DRAWN OVER THE ROOM'], ['shake', 'SHAKE', 'A SMALL KICK ON HARD LANDINGS AND HITS'], ['city', 'CITY LIFE', 'WINDOWS TRAFFIC AND STEAM IN NEON ROW'], ['para', 'PARALLAX', 'THE BACKDROP MOVES IN DEPTH'],
                                  ['speed', 'SPEED READOUT', 'FPS IN THE TOP BAR WHILE PLAYING'], ['back', 'BACK', 'BACK TO SETTINGS']] }
   };
   function setRows() { return SET_PAGES[set.page].rows; }
@@ -3638,6 +3699,7 @@
     if (id === 'fx') return weather.on ? 'ON' : 'OFF';
     if (id === 'shake') return shakeOn ? 'ON' : 'OFF';
     if (id === 'city') return cityOn ? 'ON' : 'OFF';
+    if (id === 'para') return para.on ? 'ON' : 'OFF';
     if (id === 'speed') return check === 1 ? 'ON' : 'OFF';
     if (id === 't-original') return GB.on ? '' : 'ON';
     if (id === 't-gb') return GB.kind === 'gb' ? 'ON' : '';
@@ -3653,7 +3715,8 @@
     set.row = k; set.note = ''; lastSig = '';
     if (id === 'back') { setBack(); return; }
     if (set.page === 'top') { set.topRow = k; set.page = id; set.row = 0; return; }
-    if (GB.on && (id === 'shake' || id === 'city' || id === 'fx')) { set.note = 'OFF IN THIS THEME, FOR SPEED'; return; }
+    if (GB.on && (id === 'shake' || id === 'city' || id === 'fx' || id === 'para')) { set.note = 'OFF IN THIS THEME, FOR SPEED'; return; }
+    if (id === 'para') { setPara(!para.on); set.note = para.on ? 'PARALLAX ON' : 'PARALLAX OFF. ONE FLAT BACKDROP.'; return; }
     if (id === 'shake') { setShake(!shakeOn); set.note = shakeOn ? 'SCREEN SHAKE ON' : 'SCREEN SHAKE OFF. CHECK THE SPEED READOUT.'; return; }
     if (id === 'city') { setCity(!cityOn); set.note = cityOn ? 'CITY LIFE ON. CHECK THE SPEED READOUT.' : 'CITY LIFE OFF. THE CITY STANDS STILL.'; return; }
     if (id === 'fx') { setWeather(!weather.on); set.note = weather.on ? 'PARTICLES ON. CHECK THE SPEED READOUT.' : 'PARTICLES OFF'; return; }
@@ -3792,7 +3855,7 @@
         y = 44 + i * 28 + (rows[i][0] === 'back' ? 10 : 0);
         row(i, MX - 150, y, 300, 24, rows[i][1], setValue(rows[i][0]));
       }
-      pxText(rows[set.row][2], MX, 210, 1, C.text, 'center');
+      pxText(rows[set.row][2], MX, 228, 1, C.text, 'center');
     } else {
       drawControls(u, rows, row, box);
     }

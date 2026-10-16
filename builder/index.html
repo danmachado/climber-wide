@@ -500,21 +500,30 @@
   // L.nearWin: its windows; L.cables: the overhead cables; L.rain: the baked rain (the front layer). Without L every
   // depth is painted straight into b, which is what the builder does. Either way the picture is the same.
   var CITY = null;                                         // what the game can bring to life (set by drawSky for the towers skyline)
-  function drawSky(b, w, h, h0, seed, L) {
+  // depths (optional): a list of the depths to paint, for the game's parallax layers. 'sky' is the gradient, stars,
+  // clouds and the beam tower; 'far' the farther silhouette (the city's haze and middle rows, the Temple's canopy);
+  // 'near' the nearer silhouette (the city's near row, street glow, signs and cables; the Temple's pyramid); 'front'
+  // what sits at the terrain's own depth (rain, stalactites, the Temple's ruined walls). Each call paints its depths
+  // at the size it is given, so a far layer can be shorter than the room and scroll slower. Without it (the builder,
+  // the frame's fast mode) every depth goes into b at once and the picture is the old one.
+  function drawSky(b, w, h, h0, seed, L, depths) {
     var th = TILE_THEME, sky = th.sky, far = th.far, i, x;
-    CITY = null;
-    if (!sky) { b.fillStyle = th.bg || '#0a0d1c'; b.fillRect(0, 0, w, h); return; }
-    var gr = b.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, sky[0]); gr.addColorStop(Math.max(0, 1 - h0 / h), sky[1]); gr.addColorStop(1, sky[2]);
-    b.fillStyle = gr; b.fillRect(0, 0, w, h);
+    function D(k) { return !depths || depths.indexOf(k) >= 0; }
+    if (D('near')) CITY = null;
+    if (!sky) { if (D('sky')) { b.fillStyle = th.bg || '#0a0d1c'; b.fillRect(0, 0, w, h); } return; }
+    if (D('sky')) {
+      var gr = b.createLinearGradient(0, 0, 0, h);
+      gr.addColorStop(0, sky[0]); gr.addColorStop(Math.max(0, 1 - h0 / h), sky[1]); gr.addColorStop(1, sky[2]);
+      b.fillStyle = gr; b.fillRect(0, 0, w, h);
+    }
     var s = (Math.abs(seed) % 2147483646) + 1;             // keep the generator in range, or widths could go negative
     function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647; }
     function between(a, c) { return a + Math.floor(rnd() * (c - a + 1)); }
     b.fillStyle = th.dot;                                   // stars (embers in the Furnace), only in the open sky; the Temple is daylight
-    for (i = 0; i < (th.ruins ? 0 : 70) * (h / 480); i++) { var sx = Math.floor(rnd() * w), sy = Math.floor(rnd() * (h - h0 * 0.45)); b.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1); }
+    for (i = 0; i < (th.ruins ? 0 : 70) * (h / 480); i++) { var sx = Math.floor(rnd() * w), sy = Math.floor(rnd() * (h - h0 * 0.45)); if (D('sky')) b.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1); }
     if (!far) return;
     var kind = th.skyline || 'town';
-    SKY_SIGNS = [];
+    if (D('near')) SKY_SIGNS = [];
     // heights(top) builds a one-pixel-column heightmap for one band whose tallest point is about top pixels
     function heights(top) {
       var hm = [], seg, hh, x0, px;
@@ -569,7 +578,7 @@
       near: { body: '#3e3079', hi: '#4d3e8c', lo: '#30245f', pane: '#382b70', win: ['#ffd27a', '#7fe9ff'], winA: 0.9, rimL: 'rgba(86,216,238,0.3)', rimR: 'rgba(255,90,190,0.16)' },
       beam: ['rgba(214,204,250,0.18)', 'rgba(232,226,255,0.22)'], cloud: 'rgba(255,255,255,0.07)'
     };
-    if (kind === 'towers') {                                 // one pale beam tower far back, and two soft cloud bands
+    if (kind === 'towers' && D('sky')) {                     // one pale beam tower far back, and two soft cloud bands
       var bx = between(60, w - 60), bw = between(8, 14), bh = Math.round(h0 * 0.9);
       b.fillStyle = CP.beam[0]; b.fillRect(bx, h - bh, bw, bh); b.fillStyle = CP.beam[1]; b.fillRect(bx + 2, h - bh, bw - 4, bh);
       b.fillStyle = CP.cloud; for (i = 0; i < 2; i++) { var cy = Math.round(h - h0 * (0.5 + i * 0.3)), cx = between(0, w / 2), cwid = between(60, 150); b.fillRect(cx, cy, cwid, 2); b.fillRect(cx + 10, cy - 2, cwid - 30, 2); }
@@ -620,28 +629,33 @@
         }
         return blds;
       }
-      var Lf = L ? L.far : b, Lfw = L ? L.farWin : b, Ln = L ? L.near : b, Lnw = L ? L.nearWin : b, Lc = L ? L.cables : b;
-      var winFloors = [];
-      cityRow(Lf, Lf, CP.haze, Math.round(h0 * 0.8), 2, 6, 3, false, false, false, null);
-      var mid = cityRow(Lf, Lfw, CP.mid, Math.round(h0 * 0.95), 4, 10, 4, true, true, true, winFloors), nMid = winFloors.length;
-      var near = cityRow(Ln, Lnw, CP.near, Math.round(h0 * 1.05), 8, 16, 4, true, true, true, winFloors);
-      for (i = 0; i < near.length; i++) {                    // street level: a warm haze at the foot of every gap, and a sign on some faces
-        var nb = near[i], gx = nb[0] + nb[1];
-        if (i + 1 < near.length) { var gw = near[i + 1][0] - gx; drawGlow(Ln, gx + gw / 2, h, 14 + gw, '255,170,90', 0.22); Ln.fillStyle = '#ffd27a'; Ln.fillRect(gx + Math.floor(gw / 2), h - 18, 1, 1); Ln.fillStyle = '#2a2240'; Ln.fillRect(gx + Math.floor(gw / 2), h - 17, 1, 17); }
-        if (nb[1] >= 24 && rnd() < 0.7) SKY_SIGNS.push([nb[0] + between(2, nb[1] - 22), h - between(14, nb[2] - 10), rnd() < 0.35]);
+      var Lf = L && L.far ? L.far : b, Lfw = L && L.farWin ? L.farWin : b, Ln = L && L.near ? L.near : b, Lnw = L && L.nearWin ? L.nearWin : b, Lc = L && L.cables ? L.cables : b;
+      var winFloors = [], mid = [], nMid = 0, near = [], cables = [];
+      if (D('far')) {
+        cityRow(Lf, Lf, CP.haze, Math.round(h0 * 0.8), 2, 6, 3, false, false, false, null);
+        mid = cityRow(Lf, Lfw, CP.mid, Math.round(h0 * 0.95), 4, 10, 4, true, true, true, winFloors); nMid = winFloors.length;
       }
-      var cables = [];                                       // overhead cables sagging across the alley; one may carry a string of bulbs
-      for (i = 0; i < 4; i++) { var cy0 = between(Math.round(h0 * 0.1), Math.round(h0 * 0.6)), cy1 = cy0 + between(-30, 30), sag = between(6, 18); cables.push({ y0: cy0, y1: cy1, sag: sag, bulbs: false, ph: between(0, 999), period: between(34, 52) }); }
-      if (rnd() < 0.7) cables[between(0, 3)].bulbs = true;
-      for (i = 0; i < cables.length; i++) drawCable(Lc, cables[i], 0, w);
-      var tallest = 0; for (i = 0; i < mid.length; i++) tallest = Math.max(tallest, mid[i][2]);
-      CITY = { floors: winFloors, nMid: nMid, cables: cables, w: w, h: h, h0: h0, cityTop: h - tallest, near: near, mid: mid };
+      if (D('near')) {
+        near = cityRow(Ln, Lnw, CP.near, Math.round(h0 * 1.05), 8, 16, 4, true, true, true, winFloors);
+        for (i = 0; i < near.length; i++) {                  // street level: a warm haze at the foot of every gap, and a sign on some faces
+          var nb = near[i], gx = nb[0] + nb[1];
+          if (i + 1 < near.length) { var gw = near[i + 1][0] - gx; drawGlow(Ln, gx + gw / 2, h, 14 + gw, '255,170,90', 0.22); Ln.fillStyle = '#ffd27a'; Ln.fillRect(gx + Math.floor(gw / 2), h - 18, 1, 1); Ln.fillStyle = '#2a2240'; Ln.fillRect(gx + Math.floor(gw / 2), h - 17, 1, 17); }
+          if (nb[1] >= 24 && rnd() < 0.7) SKY_SIGNS.push([nb[0] + between(2, nb[1] - 22), h - between(14, nb[2] - 10), rnd() < 0.35]);
+        }
+        // overhead cables sagging across the alley; one may carry a string of bulbs
+        for (i = 0; i < 4; i++) { var cy0 = between(Math.round(h0 * 0.1), Math.round(h0 * 0.6)), cy1 = cy0 + between(-30, 30), sag = between(6, 18); cables.push({ y0: cy0, y1: cy1, sag: sag, bulbs: false, ph: between(0, 999), period: between(34, 52) }); }
+        if (rnd() < 0.7) cables[between(0, 3)].bulbs = true;
+        for (i = 0; i < cables.length; i++) drawCable(Lc, cables[i], 0, w);
+        var tallest = 0; for (i = 0; i < mid.length; i++) tallest = Math.max(tallest, mid[i][2]); for (i = 0; i < near.length; i++) tallest = Math.max(tallest, near[i][2]);
+        CITY = { floors: winFloors, nMid: nMid, cables: cables, w: w, h: h, h0: h0, cityTop: h - tallest, near: near, mid: mid };   // mid is empty when the far rows were painted elsewhere (parallax)
+      }
     } else {
-      if (th.ruins) ruinsBack(b, w, h, h0, rnd, between, th.ruins);
-      band(far[0], Math.round(h0 * 0.34), far[2]);
-      band(far[1], Math.round(h0 * 0.2), kind === 'cave' ? far[2] : null);
-      if (th.ruins) ruinsFront(b, w, h, h0, rnd, between, th.ruins);
+      if (th.ruins) ruinsBack(b, w, h, h0, rnd, between, th.ruins, D('sky'), D('far'));
+      if (D('far')) band(far[0], Math.round(h0 * 0.34), far[2]); else heights(Math.round(h0 * 0.34));   // keep the seed stream in step
+      if (D('near')) band(far[1], Math.round(h0 * 0.2), kind === 'cave' ? far[2] : null); else heights(Math.round(h0 * 0.2));
+      if (th.ruins && D('front')) ruinsFront(b, w, h, h0, rnd, between, th.ruins);
     }
+    if (!D('front')) return;
     if (kind === 'towers') {                                 // baked rain: thin diagonal streaks at two densities, still, like a held frame
       var Lr = L ? L.rain : b;
       Lr.fillStyle = 'rgba(200,220,255,0.10)';
@@ -680,13 +694,15 @@
   function ruinsOval(b, cx, cy, rx, ry) {                   // a crisp pixel ellipse, row by row
     for (var y = -ry; y <= ry; y++) { var hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry)))); if (hw > 0) b.fillRect(cx - hw, cy + y, hw * 2, 1); }
   }
-  function ruinsBack(b, w, h, h0, rnd, between, R) {
+  function ruinsBack(b, w, h, h0, rnd, between, R, clouds, trees) {   // clouds and trees: which parts to paint (both, unless told)
     var i, x;
+    if (clouds === undefined) { clouds = true; trees = true; }
     b.fillStyle = R.cloud;                                  // soft cloud banks, a few per screen, brighter on top
     for (i = 0; i < Math.round(4 * h / 480); i++) {
       var cy = between(8, Math.max(9, h - Math.round(h0 * 0.45))), cx = between(-20, w), cw = between(18, 40);
-      for (var k = 0; k < 4; k++) ruinsOval(b, cx + k * Math.round(cw * 0.55) - cw, cy - (k % 2) * 4, Math.round(cw * (0.5 + rnd() * 0.4)), between(4, 8));
+      for (var k = 0; k < 4; k++) { var orx = Math.round(cw * (0.5 + rnd() * 0.4)), ory = between(4, 8); if (clouds) ruinsOval(b, cx + k * Math.round(cw * 0.55) - cw, cy - (k % 2) * 4, orx, ory); }
     }
+    if (!trees) return;
     for (var row = 0; row < 2; row++) {                     // two rows of round treetops, the far one paler and higher
       var base = Math.round(h0 * (row ? 0.3 : 0.44)), hm = [];
       for (x = 0; x < w; x++) hm[x] = base;
