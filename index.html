@@ -4379,14 +4379,12 @@
   var MENU = [['MAP', 'Climb through the worlds, level by level', function () { sel.w = Math.min(sel.w, levels.length - 1); toMap(); }],
               ['ENDLESS', 'Every level you have unlocked, shuffled', startEndless],
               ['SETTINGS', 'Controls and graphics', openSettings],
-              ['RELOAD', 'Fetch the newest version of the game', reloadGame],
-              ['EXIT', 'Close the game', exitGame]];
+              ['RELOAD', 'Fetch the newest version of the game', reloadGame]];   // wide: no EXIT (Dan, Oct 2026: the app closes the normal way)
   var menuNote = '';
   var MENU_BIG = 2;                                  // MENU's first two are the big buttons; the rest are icons in a row at the bottom
   var MENU_ICONS = {                                 // pixel icons for the small buttons (any size, drawn 2 game px a dot): a gear, a refresh arrow, a power symbol
     SETTINGS: ['.....##.....', '.##..##..##.', '.##########.', '..########..', '.##########.', '#####..#####', '#####..#####', '.##########.', '..########..', '.##########.', '.##..##..##.', '.....##.....'],
-    RELOAD:   ['...######...', '..########.#', '.###....####', '###......###', '##......####', '##..........', '##........##', '##........##', '###......###', '.###....###.', '..########..', '...######...'],
-    EXIT:     ['......#......', '......#......', '...#..#..#...', '..##..#..##..', '.##...#...##.', '.#....#....#.', '.#.........#.', '.#.........#.', '.##.......##.', '..##.....##..', '...#######...']
+    RELOAD:   ['...######...', '..########.#', '.###....####', '###......###', '##......####', '##..........', '##........##', '##........##', '###......###', '.###....###.', '..########..', '...######...']
   };
   // A menu button drawn as a key: a dark outline with rounded corners, a lit top band and a shaded bottom band.
   function keyButton(box, x, y, w, hh, on) {
@@ -4479,7 +4477,7 @@
     }
     return { x: x0, y: y, w: W, h: H };
   }
-  var MLAY = { slabRow: 9, slabH: 4, slabW: 18, slabCols: [4, 26], blockRow: 14, block: 4, blockCols: [16, 22, 28], floorRow: 24 };
+  var MLAY = { slabRow: 9, slabH: 4, slabW: 18, slabCols: [4, 26], blockRow: 14, block: 4, blockCols: [19, 25], floorRow: 24 };
   var menuArt = { key: '', cv: null };
   function menuWorld() { return Math.max(0, Math.min(WORLDS.length - 1, sel.w | 0)); }
   function menuGrid() {                              // the menu as a room grid: '#' terrain, 'b' backdrop, '.' open
@@ -4548,17 +4546,6 @@
     var go = function () { window.location.reload(); };
     if (window.fetch) fetch(window.location.pathname, { cache: 'reload' }).then(go, go); else go();
   }
-  // A web page is only allowed to close itself in some setups (an installed app usually can, a browser tab usually cannot).
-  // So: try to close, then try to go back to wherever the game was opened from, and say so if neither worked.
-  function exitGame() {
-    try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
-    try { window.close(); } catch (e) {}
-    setTimeout(function () {
-      if (window.history.length > 1) { try { window.history.back(); } catch (e) {} }
-      setTimeout(function () { menuNote = 'This screen cannot close itself here. Use Home or Back.'; lastSig = ''; }, 500);
-    }, 300);
-  }
-
   // ---- settings: a list of categories, each opening its own page ----
   // SETTINGS -> CONTROLS (the controller picture, what each button does, and changing it) or GRAPHICS (effect switches
   // and the speed readout). Back from a page returns to the list, back from the list returns to the menu.
