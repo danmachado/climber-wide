@@ -10,14 +10,14 @@ const { chromium } = require('playwright');
   const nav = o => p.evaluate(o => window.__climber.nav(o), o);
   let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fails++; };
   const seen = new Set(); let v, off = [];
-  const check = async () => { v = await p.evaluate(() => window.__climber.view().sel); const t = await p.evaluate(i => window.__climber.mapTile(i), v.i); seen.add(v.i); if (t.y < 100 || t.y > 400) off.push(v.i + '@' + Math.round(t.y)); };
+  const check = async () => { v = await p.evaluate(() => window.__climber.view().sel); const t = await p.evaluate(i => window.__climber.mapTile(i), v.i); seen.add(v.i); if (t.y < 56 || t.y > 160) off.push(v.i + '@' + Math.round(t.y)); };   // the climb area (MAPV.top to MAPV.bot)
   await check();
-  for (let r = 0; r < 14; r++) { for (let k = 0; k < 3; k++) { await nav({ x: r % 2 ? -1 : 1 }); await check(); } await nav({ y: -1 }); await check(); }
+  for (let r = 0; r < 10; r++) { for (let k = 0; k < 4; k++) { await nav({ x: r % 2 ? -1 : 1 }); await check(); } await nav({ y: -1 }); await check(); }   // five to a row: four steps along, one up
   ok(seen.size === 50, 'walked the snake through ' + seen.size + ' of 50 tiles');
   ok(!off.length, 'the chosen tile always in view' + (off.length ? ' (off: ' + off.join(' ') + ')' : ''));
   for (let k = 0; k < 15; k++) await nav({ y: 1 }); v = await p.evaluate(() => window.__climber.view().sel);
   const t0 = await p.evaluate(i => window.__climber.mapTile(i), v.i);
-  ok(v.i < 4 && t0.y < 400, 'down all the way returns to the bottom row (tile ' + (v.i + 1) + ')');
+  ok(v.i < 5 && t0.y < 160, 'down all the way returns to the bottom row (tile ' + (v.i + 1) + ')');
   await nav({ jump: true }); const s = await p.evaluate(() => window.__climber.view()); ok(s.scene === 'play', 'jump plays the chosen level');
   console.log('errors', JSON.stringify(errs)); console.log(fails ? fails + ' FAILED' : 'ALL PASS'); await b.close();
 })();
