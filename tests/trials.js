@@ -25,13 +25,13 @@ const ROOT = '/home/claude/climber-wide';
     if (process.env.ONLY && room.id !== process.env.ONLY && room.name !== process.env.ONLY) continue;
     const route = routes[room.id];
     if (!route) { console.log(room.name + ': no route'); fails++; continue; }
-    let res = await p.evaluate(([room, rec]) => replay(room, rec), [room, runs[room.id] || null]);
+    let res = await p.evaluate(([room, rec, mv]) => replay(room, rec, mv), [room, runs[room.id] || null, route.moves || null]);
     if (!res.won || process.env.SOLVE) {
       const t0 = Date.now();
       const s = await p.evaluate(([room, route]) => solve(room, route, { log: !!window.__log }), [room, route]);
       console.log(room.name + ': search ' + (s.won ? 'won in ' + s.rec.length + ' frames' : 'FAILED, best waypoint ' + s.best + ' of ' + route.wp.length + ' at ' + s.at) + ' (' + ((Date.now() - t0) / 1000).toFixed(0) + 's)');
       if (s.won) { try { runs = Object.assign(JSON.parse(fs.readFileSync(runsPath, 'utf8')), runs); } catch (e) {} runs[room.id] = s.rec; fs.writeFileSync(runsPath, JSON.stringify(runs)); }
-      res = await p.evaluate(([room, rec]) => replay(room, rec), [room, runs[room.id] || null]);
+      res = await p.evaluate(([room, rec, mv]) => replay(room, rec, mv), [room, runs[room.id] || null, route.moves || null]);
     }
     console.log(room.name + ': ' + (res.won ? 'replay reaches the exit in ' + (res.frames / 60).toFixed(1) + 's, dashes ' + res.dashes + ', climb frames ' + res.climb + ', wall jumps ' + res.wj : 'replay FAILED ' + res.why));
     if (!res.won) fails++;
@@ -66,8 +66,8 @@ function edgy(room, s, before) {
   for (var c = c0; c <= c1; c++) if ('^F'.indexOf(row.charAt(c)) >= 0) return true;
   return false;
 }
-function replay(room, rec) {
-  G.manual(true); G.load(room);
+function replay(room, rec, moves) {
+  G.manual(true); G.moves(moves || null); G.load(room);
   if (!rec) return { won: false, why: 'no recording' };
   var s, dashes = 0, climb = 0, wj = 0, prev = G.state();
   for (var i = 0; i < rec.length; i++) {
@@ -85,7 +85,7 @@ function replay(room, rec) {
 // Beam search. route.wp is a list of [x0,y0,x1,y1] boxes in pixels the hero's feet must pass through in order
 // (an optional 5th entry 'g' means standing there). Each node holds a full game snapshot.
 function solve(room, route, o) {
-  G.manual(true); G.load(room);
+  G.manual(true); G.moves(route.moves || null); G.load(room);
   var CH = 3, B = o.beam || route.beam || 900, MAXD = route.depth || 500;
   var acts = [];
   [-1, 0, 1].forEach(function (x) { acts.push({ x: x, y: 0 }); acts.push({ x: x, y: 0, jump: 1 }); acts.push({ x: x, y: 1, jump: 1 }); });

@@ -1,8 +1,13 @@
-// Trial rooms: hand-made rooms that each lean on one move (fall steering, dash, needle landings, climbing,
-// jump height, wall bounce and super). Writes src/trials/<id>.json (level format 1) and tests/trial-routes.json
-// (the waypoints the solver in tests/trials.js steers through). Run: node src/trials-make.js [id] to also print maps.
+// Trial rooms: hand-made rooms that each lean on one move. Three are LESSONS (`grants`: Handhold teaches the wall climb,
+// Dash Only the dash, Kickback the super jump; a lesson lends its move while you are inside and must be cleared to go
+// on, see build.js) and three are optional skill rooms (Pinpoint, Freefall, Cascade). Redrawn Oct 2026 for the wide
+// screen, 48 x 27 tiles (they were 27 x 48 for the frame). Writes src/trials/<id>.json (level format 1) and
+// tests/trial-routes.json (the waypoints the solver in tests/trials.js steers through).
+// Each room's `moves` are the moves the player has when it opens: its recorded run is made with only those, and for a
+// lesson tests/trials.js also proves it cannot be beaten without the move it teaches (even with all the others).
+// Run: node src/trials-make.js [id] to also print maps.
 var fs = require('fs'), d = __dirname;
-var COLS = 27, ROWS = 48, T = 10;
+var COLS = 48, ROWS = 27, T = 10;
 var LEGEND = { '.': 'empty', '#': 'solid', '^': 'spike_up', 'v': 'spike_down', '<': 'spike_left', '>': 'spike_right',
   'S': 'start', 'E': 'exit', 'o': 'dash_refill', 'C': 'crumble', 'G': 'gem', 'b': 'backdrop', 'I': 'ice' };
 // Tiles each room's recorded run touches (tests/trialkeep.js writes this). The texture pass keeps clear of them.
@@ -128,150 +133,149 @@ function texture(g, id, o) {
   return added;
 }
 
-function Room(id, name, world, difficulty) {
+function Room(id, name, world, difficulty, opt) {
+  opt = opt || {};
   var g = [], r;
   for (r = 0; r < ROWS; r++) g.push(new Array(COLS + 1).join('.').split(''));
   var api = {
     g: g, wp: [], needs: [],
     fill: function (c0, c1, r0, r1, ch) { for (var r = r0; r <= r1; r++) for (var c = c0; c <= c1; c++) g[r][c] = ch; return api; },
     put: function (c, r, ch) { g[r][c] = ch; return api; },
-    shell: function () { api.fill(0, 26, 0, 0, '#').fill(0, 0, 0, 47, '#').fill(26, 26, 0, 47, '#').fill(0, 26, 46, 47, '#'); return api; },
+    shell: function () { api.fill(0, COLS - 1, 0, 0, '#').fill(0, 0, 0, ROWS - 1, '#').fill(COLS - 1, COLS - 1, 0, ROWS - 1, '#').fill(0, COLS - 1, ROWS - 2, ROWS - 1, '#'); return api; },
     // a waypoint in tiles: the hero's feet must pass through columns c0..c1, rows r0..r1 (stand = on the ground there)
     via: function (c0, r0, c1, r1, stand) { var w = [c0 * T, r0 * T, (c1 + 1) * T, (r1 + 1) * T]; if (stand) w.push('g'); api.wp.push(w); return api; },
     tex: { rag: 2 },
     done: function () {
       if (api.tex) { api.tex.base = g.map(function (row) { return row.slice(); }); texture(g, id, api.tex); }
-      return { room: { format: 1, id: id, name: name, difficulty: difficulty, world: world, trial: true,
-        grid: { cols: COLS, rows: ROWS, tile: T }, legend: LEGEND, tiles: g.map(function (row) { return row.join(''); }), entities: [] },
-        route: { wp: api.wp, needs: api.needs } };
+      var room = { format: 1, id: id, name: name, difficulty: difficulty, world: world, trial: true,
+        grid: { cols: COLS, rows: ROWS, tile: T }, legend: LEGEND, tiles: g.map(function (row) { return row.join(''); }), entities: [] };
+      if (opt.grants) { room.grants = opt.grants; room.lesson = opt.lesson || 4; }   // a lesson: teaches this move, sits at this slot of its world
+      room.moves = opt.moves || { grab: true, dash: true, 'super': true };
+      return { room: room,
+        route: { wp: api.wp, needs: api.needs, moves: room.moves } };
     }
   };
   return api;
 }
 
 var rooms = [];
+var ALL = { grab: true, dash: true, 'super': true };
 
-// 1. Freefall: drop down a spiked shaft steering between alternating spike plates (no wall to grab, every wall
-// is spiked), then wall-jump up a chimney with spiked stretches on alternate sides and dash over the last spikes.
+// LESSON 1 (Brickyard, teaches the wall climb): two walls from the floor to far above a jump. The first is ten rows, a
+// climb and a mantle. The second is twenty, more than a full meter of climbing, so halfway up a floating ledge stands a
+// tile off the face: climb to it, step off onto it (standing refills the meter), jump back to the face and finish. Nothing
+// but a climb gets over either wall (a jump, a dash and a wall bounce all fall far short).
 (function () {
-  var R = Room('trial-freefall', 'Freefall', 4, 4).shell();
-  R.fill(1, 3, 4, 4, '#').put(2, 3, 'S');                 // start ledge
-  R.fill(1, 2, 5, 45, '#');                               // left wall of the drop
-  R.fill(12, 13, 1, 37, '#');                             // the spine between the drop and the chimney
-  R.fill(3, 3, 6, 37, '>').fill(11, 11, 6, 37, '<');      // spikes down both walls of the drop
-  [[10, 'L'], [18, 'R'], [26, 'L'], [34, 'R']].forEach(function (p) {
-    var r = p[0];
-    if (p[1] === 'L') R.fill(3, 7, r, r, '#').fill(4, 7, r - 1, r - 1, '^');   // gap on the right (cols 8-10)
-    else R.fill(7, 11, r, r, '#').fill(7, 10, r - 1, r - 1, '^');               // gap on the left (cols 4-6)
-  });
-  R.fill(8, 12, 45, 45, '^');                             // floor spikes between the drop and the chimney
-  R.fill(18, 25, 9, 45, '#');                             // the block the chimney climbs beside
-  R.fill(14, 14, 18, 25, '>');                            // spiked stretch on the spine side of the chimney
-  R.fill(17, 17, 29, 36, '<');                            // and on the block side, lower down
-  R.fill(18, 23, 8, 8, '^');                              // spikes on the block top
-  R.fill(24, 25, 7, 8, 'E');
-  R.via(4, 5, 10, 8).via(8, 10, 10, 13).via(4, 18, 6, 21).via(8, 26, 10, 29).via(4, 34, 6, 37).via(3, 45, 7, 45, true)
-   .via(14, 44, 17, 45, true).via(14, 30, 17, 36).via(14, 18, 17, 24).via(14, 9, 17, 12).via(24, 6, 25, 9);
-  R.needs = [];
-  rooms.push(R.done());
-})();
-
-// 2. Cascade: the exit is at the bottom. Each shelf is spiked wall to wall except one hole; under every hole
-// sits a one-tile post, set off to the side so you steer onto it as you fall, then jump and dash across the
-// spikes to the next hole on the far side.
-(function () {
-  var R = Room('trial-cascade', 'Cascade', 5, 4).shell();
-  R.fill(1, 8, 5, 5, '#').put(2, 4, 'S');                  // start ledge, room for a run-up
-  // shelf row, hole columns, post column (on this shelf, under the hole above)
-  var shelves = [[10, [22, 23], -1], [18, [4, 5], 20], [26, [22, 23], 7], [34, [6, 7], 20], [41, [20, 21], 9]];
-  shelves.forEach(function (s) {
-    var r = s[0];
-    R.fill(1, 25, r, r, '#').fill(1, 25, r - 1, r - 1, '^');
-    s[1].forEach(function (c) { R.put(c, r, '.').put(c, r - 1, '.'); });
-    if (s[2] >= 0) R.put(s[2], r - 1, '#');
-  });
-  R.fill(16, 18, 30, 33, '#').fill(16, 18, 29, 29, '^').fill(15, 15, 30, 33, '<').fill(19, 19, 30, 32, '>');   // a spiked block in the way on the fourth shelf
-  R.fill(1, 18, 45, 45, '^');                              // spikes on the floor except under the last hole
-  R.fill(23, 24, 44, 45, 'E');
-  R.via(9, 1, 21, 9).via(22, 10, 23, 12).via(20, 17, 20, 17, true).via(4, 18, 5, 20).via(7, 25, 7, 25, true).via(22, 26, 23, 28)
-   .via(20, 33, 20, 33, true).via(6, 34, 7, 36).via(9, 40, 9, 40, true).via(20, 41, 21, 43);
-  R.needs = ['dash'];
-  rooms.push(R.done());
-})();
-
-// 3. Dash Only: one-tile posts over a spike floor, under a spike ceiling, between spiked walls. Every gap is
-// too far or too high to jump, so every move is a jump and a dash, and each post is where the dash comes back.
-(function () {
-  var R = Room('trial-dashonly', 'Dash Only', 3, 4).shell();
-  R.fill(1, 1, 1, 45, '>').fill(25, 25, 1, 45, '<').fill(2, 24, 45, 45, '^').fill(2, 24, 1, 1, 'v');
-  R.fill(1, 4, 42, 45, '#').put(2, 41, 'S');              // start ledge
-  var posts = [[15, 42], [21, 34], [10, 30], [16, 22], [5, 17], [13, 11]];
-  posts.forEach(function (p) { R.put(p[0], p[1], '#'); });
-  R.fill(20, 25, 7, 7, '#').fill(25, 25, 1, 6, '#').fill(23, 24, 5, 6, 'E');   // exit ledge
-  R.via(15, 42, 15, 42, true).via(21, 34, 21, 34, true).via(10, 30, 10, 30, true).via(16, 22, 16, 22, true)
-   .via(5, 17, 5, 17, true).via(13, 11, 13, 11, true).via(20, 4, 25, 7);
-  R.needs = ['dash'];
-  rooms.push(R.done());
-})();
-
-// 4. Pinpoint: three tiers of one-tile posts over spikes, each tier under a spiked ceiling just high enough
-// for a short hop. A full jump is death, so every hop is a tap. The steps between tiers are full jumps.
-(function () {
-  var R = Room('trial-pinpoint', 'Pinpoint', 1, 3).shell(); R.tex.rag = 3;
-  function posts(top, cols) { cols.forEach(function (c) { R.fill(c, c, top, top + 3, '#'); }); }
-  R.fill(1, 25, 45, 45, '^');
-  R.fill(1, 2, 41, 45, '#').put(1, 40, 'S');              // start
-  posts(41, [6, 10, 14, 18]);                             // tier 1, left to right
-  R.fill(1, 18, 37, 37, '#').fill(1, 18, 38, 38, 'v');    // its ceiling, which is tier 2's floor
-  R.fill(21, 21, 39, 44, '#');                            // step up at the right
-  R.fill(23, 25, 36, 44, '#');                            // ledge at the right
-  R.fill(1, 18, 36, 36, '^');
-  posts(33, [17, 13, 9, 5]);                              // tier 2, right to left
-  R.fill(4, 25, 29, 29, '#').fill(5, 18, 30, 30, 'v');    // its ceiling, which is tier 3's floor
-  R.fill(1, 2, 33, 36, '#');                              // ledge at the left
-  R.put(3, 30, '#');                                      // nub
-  R.fill(1, 2, 27, 28, '#');                              // step
-  R.fill(4, 21, 28, 28, '^');
-  posts(25, [6, 10, 14, 18]);                             // tier 3, left to right
-  R.fill(6, 17, 21, 21, '#').fill(6, 17, 22, 22, 'v');    // its ceiling
-  R.fill(22, 25, 22, 28, '#').fill(24, 25, 20, 21, 'E');  // exit ledge
-  R.via(6, 41, 6, 41, true).via(10, 41, 10, 41, true).via(14, 41, 14, 41, true).via(18, 41, 18, 41, true)
-   .via(21, 39, 21, 39, true).via(23, 36, 25, 36, true).via(17, 33, 17, 33, true).via(13, 33, 13, 33, true)
-   .via(9, 33, 9, 33, true).via(5, 33, 5, 33, true).via(1, 33, 2, 33, true).via(3, 30, 3, 30, true).via(1, 27, 2, 27, true)
-   .via(6, 25, 6, 25, true).via(10, 25, 10, 25, true).via(14, 25, 14, 25, true).via(18, 25, 18, 25, true).via(22, 19, 25, 22);
-  R.needs = ['+dash'];
-  rooms.push(R.done());
-})();
-
-// 5. Handhold: two tall walls with spiked tops over a spike floor. The only footholds are one-tile nubs, each far
-// enough below the next wall's top that a jump and a dash fall short: grab the face, climb most of the meter
-// away, then climb-jump over the spikes. The meter is the puzzle: climb too slowly and it runs out.
-(function () {
-  var R = Room('trial-handhold', 'Handhold', 1, 4).shell(); R.tex.rag = 3;
-  R.fill(1, 25, 45, 45, '^');
-  R.fill(1, 3, 42, 45, '#').put(1, 41, 'S');
-  R.fill(7, 8, 22, 45, '#').fill(7, 8, 21, 21, '^').put(6, 36, '#');      // first wall, its nub on the near face
-  R.fill(15, 16, 12, 45, '#').fill(15, 16, 11, 11, '^').put(14, 26, '#'); // second wall, its nub on the near face
-  R.fill(21, 25, 20, 45, '#').fill(21, 25, 19, 19, '.').fill(24, 25, 18, 19, 'E');   // exit ledge
-  R.fill(17, 20, 44, 44, '#').fill(17, 20, 43, 43, '^');
-  R.via(6, 36, 6, 36, true).via(9, 12, 14, 24).via(14, 26, 14, 26, true).via(17, 4, 20, 17).via(21, 14, 25, 20);
+  var R = Room('trial-handhold', 'Handhold', 1, 2, { grants: 'grab', moves: { grab: true, dash: false, 'super': false } }).shell();
+  R.tex = { rag: 2, back: 0.35 };
+  R.put(2, 24, 'S');
+  R.fill(12, 13, 15, 24, '#');                            // wall one, ten rows
+  R.fill(26, 27, 5, 24, '#');                             // wall two, twenty rows, the exit on top
+  R.fill(23, 24, 17, 17, '#');                            // the rest ledge, beside the climbing column (col 25) so the climb passes it
+  R.fill(26, 27, 3, 4, 'E');
+  R.via(12, 14, 13, 14, true).via(23, 16, 24, 16, true).via(26, 4, 27, 4, true);
   R.needs = ['grab,bounce'];   // a wall bounce off a face can stand in for part of a climb, so the check takes both away
   rooms.push(R.done());
 })();
 
-// 6. Kickback: momentum. A spike pit under a low spiked ceiling that only a hyper clears (dash along the ground,
-// jump while holding down: long and low), a climb up the far wall, then a pit too wide for a jump and a dash that a
-// super clears (dash along the ledge, jump: long and high). Neither gap can be crossed any other way.
+// LESSON 2 (Icehouse, teaches the dash): stepping stones over spikes, every gap one step past a jump (six tiles one row up,
+// seven on the level), so each hop is a jump and a dash. The stones are three wide to land on.
 (function () {
-  var R = Room('trial-kickback', 'Kickback', 2, 5).shell(); R.tex.rag = 4;
-  R.fill(1, 1, 14, 45, '>');                              // the left wall is spiked: no climbing up to the exit
-  R.put(3, 45, 'S');
-  R.fill(6, 18, 45, 45, '^');                             // the low pit
-  R.fill(4, 20, 41, 41, '#').fill(4, 20, 42, 42, 'v').fill(4, 20, 40, 40, '^');   // its ceiling, spiked both sides
-  R.fill(19, 23, 33, 33, '#').fill(19, 23, 34, 34, 'v');  // the ledge, reached up the right wall
-  R.fill(2, 4, 33, 33, '#').fill(2, 4, 34, 34, 'v').fill(2, 3, 31, 32, 'E');   // the far side of the high pit
-  R.via(19, 45, 23, 45, true).via(24, 30, 25, 40).via(19, 33, 23, 33, true).via(2, 30, 4, 33);
+  var R = Room('trial-dashonly', 'Dash Only', 2, 2, { grants: 'dash', moves: { grab: true, dash: true, 'super': false } }).shell();
+  R.tex = { rag: 2, back: 0.35 };
+  R.fill(5, 46, 24, 24, '^');                             // the whole floor is spikes
+  R.fill(1, 4, 19, 24, '#').put(2, 18, 'S');              // the start ledge
+  R.fill(12, 14, 19, 24, '#');                            // gap 7, level
+  R.fill(21, 23, 18, 24, '#');                            // gap 6, one up
+  R.fill(31, 33, 18, 24, '#');                            // gap 7, level
+  R.fill(40, 46, 17, 24, '#');                            // gap 6, one up: the exit ledge
+  R.fill(45, 46, 15, 16, 'E');
+  R.via(12, 18, 14, 18, true).via(21, 17, 23, 17, true).via(31, 17, 33, 17, true).via(40, 16, 44, 16, true);
+  R.needs = ['dash'];
+  rooms.push(R.done());
+})();
+
+// LESSON 3 (Furnace, teaches the super jump): two pits no walk, jump or dash crosses. The first is thirteen tiles under a
+// spiked ceiling, only a hyper clears it (dash along the ground, jump while holding down: long and low); the second is twelve
+// tiles in the open, a super (dash along the ground, jump: long and high) carries over it.
+(function () {
+  var R = Room('trial-kickback', 'Kickback', 3, 3, { grants: 'super', moves: ALL }).shell();
+  R.tex = { rag: 2, back: 0.35 };
+  R.fill(1, 6, 19, 24, '#').put(2, 18, 'S');              // the start ledge
+  R.fill(7, 19, 24, 24, '^');                             // pit one, thirteen wide
+  R.fill(7, 19, 14, 14, '#').fill(7, 19, 15, 15, 'v').fill(7, 19, 13, 13, '^');   // its low ceiling, spiked both sides
+  R.fill(20, 31, 19, 24, '#');                            // the middle ledge, long enough to stop on after a hyper
+  R.fill(32, 43, 24, 24, '^');                            // pit two, twelve wide
+  R.fill(44, 46, 19, 24, '#').fill(45, 46, 17, 18, 'E');  // the far ledge
+  R.via(20, 18, 31, 18, true).via(44, 18, 44, 18, true);
   R.needs = ['super'];
+  rooms.push(R.done());
+})();
+
+// Pinpoint (Brickyard, optional): one-tile posts over spikes, under a spiked ceiling just high enough for a short hop.
+// A full jump is death, so every hop is a tap.
+(function () {
+  var R = Room('trial-pinpoint', 'Pinpoint', 1, 3, { moves: { grab: true, dash: false, 'super': false } }).shell();
+  R.tex = { rag: 2, back: 0.3 };
+  R.fill(1, 46, 24, 24, '^');
+  R.fill(1, 2, 20, 24, '#').put(1, 19, 'S');              // the start
+  var posts = [6, 10, 14, 18, 22, 26, 30, 34, 38];
+  posts.forEach(function (c) { R.fill(c, c, 20, 24, '#'); });
+  R.fill(3, 42, 16, 16, '#').fill(3, 42, 17, 17, 'v');    // the ceiling, two clear rows over the posts
+  R.fill(42, 46, 20, 24, '#').fill(44, 45, 18, 19, 'E');  // the exit ledge
+  var w = posts.map(function (c) { return [c, 19]; });
+  w.forEach(function (q) { R.via(q[0], 19, q[0], 19, true); });
+  R.via(43, 19, 46, 19, true);
+  R.needs = [];
+  rooms.push(R.done());
+})();
+
+// Freefall (Temple, optional): drop down a spiked shaft steering through the gaps of three spiked plates (no wall to
+// grab, both walls are spiked), run under the spine over a spike patch, then wall-jump up a chimney whose walls are spiked
+// in turn, and dash over the spikes on top to the exit.
+(function () {
+  var R = Room('trial-freefall', 'Freefall', 4, 4, { moves: ALL }).shell();
+  R.tex = { rag: 2, back: 0.3 };
+  R.fill(1, 5, 4, 5, '#').put(2, 3, 'S');                 // the start ledge
+  R.fill(1, 3, 6, 24, '#');                               // the shaft's left wall
+  R.fill(13, 14, 1, 20, '#');                             // the spine between the shaft and the chimney
+  R.fill(4, 4, 7, 20, '>').fill(12, 12, 7, 20, '<');      // spikes down both walls of the shaft
+  [[9, 'L'], [15, 'R'], [21, 'L']].forEach(function (p) {
+    var r = p[0];
+    if (p[1] === 'L') R.fill(5, 8, r, r, '#').fill(5, 8, r - 1, r - 1, '^');   // gap on the right (cols 9-11)
+    else R.fill(8, 11, r, r, '#').fill(8, 11, r - 1, r - 1, '^');               // gap on the left (cols 5-7)
+  });
+  R.fill(5, 8, 24, 24, '^');                              // the floor under the first plates
+  R.fill(12, 14, 24, 24, '^');                            // spikes between the shaft and the chimney
+  R.fill(19, 33, 7, 24, '#');                             // the block the chimney climbs beside
+  R.fill(15, 15, 10, 15, '>');                            // spiked stretch on the spine side of the chimney
+  R.fill(18, 18, 17, 22, '<');                            // and on the block side, lower down
+  R.fill(19, 24, 6, 6, '^');                              // spikes on the block top
+  R.fill(25, 26, 5, 6, 'E');
+  R.via(9, 10, 11, 12).via(5, 16, 7, 18).via(9, 22, 11, 24, true)
+   .via(15, 23, 18, 24, true).via(15, 14, 18, 18).via(15, 8, 18, 12).via(25, 4, 26, 6);
+  R.needs = [];
+  rooms.push(R.done());
+})();
+
+// Cascade (Neon Row, optional): the exit is at the bottom. Three shelves, spiked wall to wall except one hole each; under
+// every hole sits a one-tile post a little to the side, so you steer onto it as you fall, then jump and dash across the
+// spikes to the next hole.
+(function () {
+  var R = Room('trial-cascade', 'Cascade', 5, 4, { moves: ALL }).shell();
+  R.tex = { rag: 2, back: 0.3 };
+  [[9, [16, 17, 18], 14, null], [15, [22, 23, 24], 20, 14], [21, [28, 29, 30], null, 20]].forEach(function (s) { /* placed below */ });
+  R.fill(1, 46, 9, 9, '#').fill(1, 46, 8, 8, '^');        // shelf one
+  R.fill(1, 46, 15, 15, '#').fill(1, 46, 14, 14, '^');    // shelf two
+  R.fill(1, 46, 21, 21, '#').fill(1, 46, 20, 20, '^');    // shelf three
+  R.fill(1, 7, 5, 8, '#').put(2, 4, 'S');                 // the start ledge, over shelf one
+  [[9, 16, 18], [15, 22, 24], [21, 28, 30]].forEach(function (h) { R.fill(h[1], h[2], h[0] - 1, h[0], '.'); });   // the holes
+  R.put(14, 14, '#');                                     // post under hole one, two tiles to its left
+  R.put(20, 20, '#');                                     // post under hole two
+  R.fill(1, 46, 24, 24, '^').fill(28, 30, 23, 24, 'E');   // the floor is spikes, except under the last hole, where the exit is
+  R.fill(28, 30, 24, 24, 'E');
+  R.via(16, 10, 18, 12).via(14, 13, 14, 13, true).via(22, 16, 24, 18).via(20, 19, 20, 19, true).via(28, 22, 30, 24);
+  R.needs = ['dash'];
   rooms.push(R.done());
 })();
 

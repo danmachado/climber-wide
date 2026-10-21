@@ -7,6 +7,9 @@
   //
   // RULE: every level element the game supports must also be something this builder can place. When a new
   // element is added to the game, add it here (and to the auto-player in tests/gentest.js) in the same change.
+  // Moves a level may ask the player for. A level built without a move must be beatable without it (tests/gentest.js plays it
+  // with the others taken away). Absent means everything, which is what the builder and old settings get.
+  function abilitiesOf(opts) { var a = opts.abilities || {}; return { grab: a.grab !== false, dash: a.dash !== false, 'super': a['super'] !== false }; }
   function generateRoom(opts, seed) {
     var layout = opts.layout || 'floors';
     if (layout === 'mixed') layout = ((seed >>> 3) % 2) ? 'islands' : 'floors';
@@ -31,7 +34,7 @@
     var COLS = SCREEN.cols, ROWS = opts.rows === SCREEN.tall ? SCREEN.tall : SCREEN.rows, R = COLS - 2, E = COLS - 1, D = Math.max(1, Math.min(5, opts.difficulty | 0)), s = seed >>> 0;
     var EL = opts.elements || { spikes: opts.spikes > 0, refills: !!opts.refills };
     var SP = EL.spikes ? Math.max(1, opts.spikes | 0) : 0;
-    var WORLD = opts.world | 0, SHAPE = opts.shape !== false;
+    var WORLD = opts.world | 0, SHAPE = opts.shape !== false, CAN = abilitiesOf(opts);
     var OWN = { ice: 2, firepits: 3, fireballs: 3, jets: 3, lava: 3, lasers: 4, drones: 4, wires: 5, holos: 5 }, own;
     if (WORLD) for (own in OWN) if (EL[own] && OWN[own] !== WORLD) { EL = Object.assign({}, EL); EL[own] = false; }
     var HZ = SP > 0 ? SP : (EL.firepits ? 1 : 0);
@@ -53,7 +56,7 @@
     var rises = [[1, 2], [0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3], [2, 3]][D - 1], minGap = [3, 3, 4, 4, 5][D - 1];
     function pool(recipe, rr0, gmin) { var gl = REACH[recipe][rr0]; if (!gl) return; for (var gs in gl) { var gp = +gs, o = gl[gs]; if (gp >= gmin && o >= 2) HOPS.push([rr0, gp, recipe, Math.max(3, Math.ceil((o + 10) / 10)), o]); } }
     for (var hi = 0; hi < rises.length; hi++) pool('jump', rises[hi], minGap);
-    if (D >= 3) { pool('dash', 1, 6); if (D >= 4) pool('dash', 0, 6); }
+    if (D >= 3 && CAN.dash) { pool('dash', 1, 6); if (D >= 4) pool('dash', 0, 6); }
     var plan = [], islands = [];
     // need marks the cells the route must keep clear: standing room over every slab, the arc of every hop, the
     // face of every pillar, the column of every track. A new piece may only go where nothing is needed, and its
@@ -151,7 +154,7 @@
     while (y > 9) {
       var cand = null, tries;
       for (tries = 0; tries < 40 && !cand; tries++) {
-        var move = k === 0 ? 'hop' : pick({ hop: 6, climb: 3, chimney: D >= 2 ? 2 : 0, spring: EL.springs !== false && islands[k].move !== 'shelf' ? 1.5 : 0, zip: EL.zips || EL.movers ? 1.5 : 0, shelf: islands[k].move === 'shelf' || islands[k].move === 'spring' ? 0 : (tries < 20 ? 1.5 : 4) });
+        var move = k === 0 ? 'hop' : pick({ hop: 6, climb: CAN.grab ? 3 : 0, chimney: CAN.grab && D >= 2 ? 2 : 0, spring: EL.springs !== false && islands[k].move !== 'shelf' ? 1.5 : 0, zip: EL.zips || EL.movers ? 1.5 : 0, shelf: islands[k].move === 'shelf' || islands[k].move === 'spring' ? 0 : (tries < 20 ? 1.5 : 4) });
         var d = tries < 20 ? dir : -dir;                  // after a few misses, try the other way
         ignore = null;
         if (move === 'hop') {                              // a hop tries every recipe in the pool, in a random order
@@ -214,7 +217,7 @@
     return {
       plan: { kind: 'islands', islands: islands }, stats: stats, top: y,
       room: { format: 1, id: 'auto-' + seed, name: 'Auto ' + seed, difficulty: D, world: WORLD || 1, grid: { cols: COLS, rows: ROWS, tile: 10 },
-              tiles: g.map(function (row) { return row.join(''); }), entities: [] }
+              tiles: g.map(function (row) { return row.join(''); }), entities: [], moves: opts.abilities ? abilitiesOf(opts) : undefined }
     };
   }
   function generateFloors(opts, seed) {
@@ -224,6 +227,7 @@
     var styles = opts.styles && opts.styles.length ? opts.styles : (opts.style && opts.style !== 'mixed' ? [opts.style] : []);
     var SHAPE = opts.shape !== false;
     var WORLD = opts.world | 0, ICY = WORLD === 2 ? 4 : 1;                                // a world leans on its own pieces
+    var CAN = abilitiesOf(opts);                                                           // the moves this level may ask for (wall climb: grab, dash, super jump)
     var OWN = { ice: 2, firepits: 3, fireballs: 3, jets: 3, lava: 3, lasers: 4, drones: 4, wires: 5, holos: 5 }, own;   // pieces that belong to one world
     if (WORLD) for (own in OWN) if (EL[own] && OWN[own] !== WORLD) { EL = Object.assign({}, EL); EL[own] = false; }
     var HZ = SP > 0 ? SP : (EL.firepits ? 1 : 0);                                        // floor hazards: spikes, or flames in the Furnace                                                    // organic shaping on by default
@@ -265,8 +269,8 @@
       if (!top) {
         conn = { type: pick({
           steps: [5, 3, 2, 1, 0.5][D - 1] * (likes('jump') ? 2 : 1),
-          open: 2 * (likes('dash') || likes('climb') ? 2 : 1),
-          curtain: maxHf >= 7 ? [1, 2, 3, 4, 5][D - 1] * 0.8 * (likes('climb') ? 2 : 1) : 0,
+          open: CAN.grab ? 2 * (likes('dash') || likes('climb') ? 2 : 1) : 0,
+          curtain: CAN.grab && maxHf >= 7 ? [1, 2, 3, 4, 5][D - 1] * 0.8 * (likes('climb') ? 2 : 1) : 0,
           lift: EL.movers || EL.zips ? 3 : 0,
           spring: EL.springs !== false ? 2.5 : 0                       // bounce up through the opening
         }) };
@@ -290,11 +294,11 @@
         var gapBefore = obs.length ? lastGap : cur - s0 + 2;                              // clear tiles behind the next obstacle, where the hero can stand (he lands about two tiles short of s0)
         var w = {
           spikes: HZ > 0 && room >= 3 ? (likes('jump') ? 5 : 3) * (SP > 1 ? 2 : 1) : 0,
-          wide: HZ > 0 && TUNE.wideW && room >= TUNE.wideW[0] + 2 ? (likes('dash') ? 8 : 2) * (D >= 4 ? 1.5 : 1) : 0,
+          wide: CAN.dash && HZ > 0 && TUNE.wideW && room >= TUNE.wideW[0] + 2 ? (likes('dash') ? 8 : 2) * (D >= 4 ? 1.5 : 1) : 0,
           crown: SP > 0 && TUNE.crownW && room >= TUNE.crownW[0] + 1 ? 2 : 0,
           block: room >= 3 ? (SP > 1 ? 0 : (SP === 1 ? 1 : 3)) * (likes('jump') ? 1.5 : 1) : 0,
-          wall: canWall && room >= 3 ? (likes('climb') ? 6 : 2) * (SP > 1 ? 0.3 : 1) : 0,
-          wallspikes: canDrop && room >= 5 ? (likes('climb') ? 6 : 2) : 0,
+          wall: CAN.grab && canWall && room >= 3 ? (likes('climb') ? 6 : 2) * (SP > 1 ? 0.3 : 1) : 0,
+          wallspikes: CAN.grab && canDrop && room >= 5 ? (likes('climb') ? 6 : 2) : 0,
           icespikes: EL.ice && SP > 0 && room >= TUNE.iceL[0] + 3 ? 3 * ICY : 0,                    // slide in, jump the spikes at the end
           iceblock: EL.ice && SP < 2 && room >= TUNE.iceL[0] + 3 ? (SP ? 1 : 3) * ICY : 0,           // slide into a block to hop
           bridge: EL.crumble && floor > 0 && room >= 4 ? 3 : 0,                                // crumbling stretch of floor
@@ -480,6 +484,6 @@
     return {
       plan: plan, stats: stats,
       room: { format: 1, id: 'auto-' + seed, name: 'Auto ' + seed, difficulty: D, world: WORLD || 1, grid: { cols: COLS, rows: ROWS, tile: 10 },
-              tiles: g.map(function (row) { return row.join(''); }), entities: [] }
+              tiles: g.map(function (row) { return row.join(''); }), entities: [], moves: opts.abilities ? abilitiesOf(opts) : undefined }
     };
   }

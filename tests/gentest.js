@@ -15,6 +15,7 @@ const fs = require('fs');
     const G = window.__climber; G.manual(true);
     const CW = window.SCREEN.cols, col = (t, d) => d > 0 ? 1 + t : CW - 2 - t;   // the room shape comes from shared-screen.js
     function solve(out) {
+      G.moves(out.room.moves || null);                                                      // a level built without a move is played without it
       G.load(out.room);
       let s = G.state(), frames = 0, where = 'spawn';
       const I = (o) => Object.assign({ x: 0, y: 0, jump: false, dash: false, grab: false }, o);
@@ -299,7 +300,8 @@ const fs = require('fs');
     const process_layout = (seed, ob) => (window.__layout || 'floors');   // islands are work in progress: LAYOUT=islands to sweep them
     for (let seed = 1; seed <= N; seed++) for (let D = 1; D <= (N === 1 ? 1 : 5); D++) for (const style of styles) for (let ob = 0; ob < 3; ob++) for (let sp = 0; sp < 3; sp++) {
       const el = seed % 4;   // rotate which new pieces are switched on
-      const opts = { difficulty: D, obstacles: ob, styles: style === 'mixed' ? [] : (seed % 3 === 0 ? [style, 'jump'] : [style]), spikes: Math.max(1, sp), world: seed % 5 + 1, rows: seed % 7 === 0 ? window.SCREEN.tall : window.SCREEN.rows, layout: process_layout(seed, ob),
+      const ab = [{}, { dash: false }, { grab: false }, { grab: false, dash: false }][(seed + D + ob + sp) % 4];   // and which moves the level may ask for
+      const opts = { difficulty: D, obstacles: ob, styles: style === 'mixed' ? [] : (seed % 3 === 0 ? [style, 'jump'] : [style]), spikes: Math.max(1, sp), world: seed % 5 + 1, abilities: window.__allMoves ? undefined : ab, rows: seed % 7 === 0 ? window.SCREEN.tall : window.SCREEN.rows, layout: process_layout(seed, ob),
                      elements: { raiders: seed % 3 !== 1, barrels: seed % 2 === 0, heavies: seed % 3 === 0, springs: seed % 4 !== 1, gems: true, firepits: seed % 3 !== 1, fireballs: seed % 3 !== 2, spikes: sp > 0, refills: seed % 2 === 0, ice: el === 1 || el === 3, crumble: el === 2 || el === 3, movers: el === 0 || el === 3, zips: seed % 5 !== 2, keys: seed % 3 !== 0, jets: seed % 4 !== 3, lava: seed % 2 === 1, lasers: seed % 3 !== 1, drones: seed % 4 !== 2, wires: seed % 2 === 0, holos: seed % 3 !== 2 } };
       const out = window.generateRoom(opts, seed * 7919 + D * 31 + ob * 7 + sp);
       res.total++;
