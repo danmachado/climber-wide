@@ -7,6 +7,7 @@ def rgb(h): h = h.lstrip('#'); return [int(h[i:i+2], 16) for i in (0, 2, 4)]
 #   'hero-mustache'  Dan's mustached hero (sprite pack in hero-mustache/)
 #   'hero'           the earlier human with the orange hat (sprite pack in hero/)
 #   'hero-wolf'      the lone climber with the bandana (drawn in code by hero-wolf/draw.py; the tails are simulated in the game)
+#   'hero-army'      the army guy with the rifle (Dan's armyguy.png, posed by hero-army/draw.py; tails simulated in the game)
 HERO_CHOICE = 'hero-wolf'
 
 # colour roles per pack: the game recolours these for "dash used" and "tired", and takes its effect colours from here
@@ -27,6 +28,13 @@ ROLES = {
         'tired': [['#606E58', '#3E483A'], ['#3E483A', '#2C342A'], ['#D8A77A', '#B2805A'], ['#B2805A', '#8C6244'], ['#9A6D4C', '#7A5238']],   # low stamina: shirt and skin drop a tone (far arm too)
         'trail': ['#D93A2E', '#D8A77A'], 'burst': ['#d93a2e', '#d8a77a'],     # afterimages and the death burst: bandana red, then skin
         'chain': { 'can': ['#D93A2E', '#F05C46'], 'spent': ['#5A5F6E', '#6E7382'], 'tired': ['#C47F24', '#FFB74A'], 'flash': '#FFFFFF', 'hair': '#543A30' },   # the simulated tails and the lock of hair
+    },
+    'hero-army': {
+        'spent': '#5A5F6E',                                                   # bandana goes slate grey when there is not enough stamina to dash
+        'spentPairs': [['#AC3232', '#5A5F6E'], ['#8E2A2A', '#40444F']],       # the band and its knot
+        'tired': [['#4B692F', '#323C39'], ['#524B24', '#323C39'], ['#EEC39A', '#D9A066'], ['#D9A066', '#B8824C'], ['#B8824C', '#8C6244']],   # low stamina: vest and skin drop a tone
+        'trail': ['#AC3232', '#EEC39A'], 'burst': ['#ac3232', '#eec39a'],     # afterimages and the death burst: bandana red, then skin
+        'chain': { 'can': ['#AC3232', '#C84040'], 'spent': ['#5A5F6E', '#6E7382'], 'tired': ['#C47F24', '#FFB74A'], 'flash': '#FFFFFF', 'hair': '#45283C' },   # the simulated tails and the lock of hair
     },
 }
 PACK = HERO_CHOICE if HERO_CHOICE != 'lantern' else 'hero-mustache'           # the lantern still carries a sheet, it just is not switched on
