@@ -1,5 +1,5 @@
 {
- "design": "Army guy: red bandana, olive vest, blue pants, rifle held level (tails simulated in the game)",
+ "design": "Army guy: red bandana, olive vest, blue pants, rifle out only to shoot (tails simulated in the game)",
  "dashIndicator": {
   "feature": "Bandana",
   "hex": "#AC3232"
@@ -288,16 +288,16 @@
      4
     ],
     [
-     5,
-     4
+     4,
+     5
     ],
     [
-     5,
-     4
+     4,
+     5
     ],
     [
-     5,
-     4
+     4,
+     5
     ],
     [
      4,
@@ -350,20 +350,20 @@
      4
     ],
     [
-     4,
-     4
+     5,
+     5
     ],
     [
      5,
-     4
-    ],
-    [
-     4,
-     4
+     5
     ],
     [
      5,
-     4
+     5
+    ],
+    [
+     5,
+     5
     ],
     [
      4,
@@ -459,7 +459,7 @@
    "arms": [
     [
      5,
-     4
+     5
     ],
     [
      4,
@@ -493,11 +493,11 @@
     ],
     [
      5,
-     4
+     5
     ],
     [
      5,
-     4
+     5
     ]
    ],
    "loopFrom": 1
@@ -558,7 +558,7 @@
     ],
     [
      4,
-     4
+     5
     ]
    ]
   },
@@ -583,8 +583,8 @@
      4
     ],
     [
-     5,
-     4
+     4,
+     5
     ]
    ]
   },
@@ -636,7 +636,7 @@
     ],
     [
      4,
-     4
+     5
     ]
    ]
   },
@@ -827,7 +827,7 @@
    ],
    "arms": [
     [
-     4,
+     5,
      4
     ]
    ]
@@ -870,7 +870,7 @@
     ],
     [
      5,
-     4
+     5
     ],
     [
      4,

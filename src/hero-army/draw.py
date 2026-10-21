@@ -3,10 +3,9 @@
 #   - a hand-drawn head (his exact pixels) always sits on the vest (chin row on the row above it), so it cannot float
 #   - the vest sits on the belt row (hip); the legs start on the row under it
 #   - the far (back) arm is a line between joints (Pose.arm, 4 px, 5 reaching, two-tone, a shade darker than the near arm)
-#   - the near arm holds the RIFLE: a hand-drawn part (shoulder, rifle, stock, hand) that stays level in every pose and
-#     bounces a frame behind the body in the run (Broforce pattern: legs do the work, the gun stays level)
-#   - on the wall the rifle is slung on his back and both hands grip; wall_aim turns him round with the gun out
-#   - the aim twins (`_aim`) raise the rifle to the shoulder and bring the far hand onto the foregrip (two-handed)
+#   - the near arm is posed the same way; both arms swing against the legs in the run and hang in the idle
+#   - the RIFLE only comes out to shoot (Dan, Oct 2026): the aim twins (`_aim`) hold it level at the shoulder, the far
+#     hand on the foregrip (two-handed); every other pose has no gun. wall_aim turns him round with the gun out.
 #   - layered: far arm, far leg, vest, near leg, head, near arm and rifle; then the seam pass (no outline outside)
 # The bandana tails are NOT here: the game hangs two chains from the knot pixel `k` (see template.html).
 # Check:  python3 audit.py      Previews: python3 preview.py      Run: python3 draw.py  then in src/: make-hero.py, build.js
@@ -182,10 +181,6 @@ class Pose:
         self.px(x0, gy + 2, 'g', 'gun'); self.px(x0 + 1, gy + 2, 'G', 'gun')       # the stock
         if hand: self.px(x0 + 5, gy + 2, 'S', 'na'); self.px(x0 + 6, gy + 2, 's', 'na')
         self.arm_lengths.append(4)
-    def slung(self, tx, ty):
-        # The rifle on his back (wall poses): a short diagonal of barrel behind the far shoulder, lit along its top.
-        for i, (dx, dy) in enumerate(((-2, 1), (-3, 2), (-4, 3), (-5, 4))):
-            self.px(tx + dx, ty + dy, 'g', 'gun'); self.px(tx + dx + 1, ty + dy, 'G', 'gun')
     def boot(self, x, y, near, kind='flat', toe=1, leg=None):
         # Flat boots, his pixels: one row, two wide, heel dark and toe lit on the near foot. Snapped under the leg.
         who = 'nl' if near else 'fl'
@@ -234,14 +229,13 @@ def outline(fr):
     return recolor_lines(selout(fr))
 
 def pose(hip=12, tx=5, torso='mid', head='normal', hdx=0, near_leg=None, far_leg=None, near_boot=None, far_boot=None,
-         far_arm=None, near_arm=None, hips=True, shift=0, gun='level', gdy=0, gx=0, far_front=False):
+         far_arm=None, near_arm=None, hips=True, shift=0, gun=None, gx=0, far_front=False, near_behind=False):
     """hip: the belt row. tx: vest column. Legs and arms are joint lists in frame coords. The head is placed so its
-    chin row is the row above the vest. gun: 'level' (held, gdy rows off its rest, gx columns forward), 'raised' (to the
-    shoulder, firing), 'back' (slung, both hands free; near_arm is then a joint list) or None. far_front: the far arm
-    is drawn in front of the vest (on the foregrip)."""
+    chin row is the row above the vest. gun: None (no rifle, the near arm is posed from near_arm) or 'raised' (firing:
+    the rifle level at the shoulder, gx columns forward; far_front puts the far arm in front of the vest, on the
+    foregrip). near_behind: the near arm goes behind the head (hands at the back of the head)."""
     P = Pose(); t = VEST[torso]; ty = hip - len(t) + 1
     if far_arm and not far_front: P.arm(far_arm, False)
-    if gun == 'back': P.slung(tx, ty)
     if far_leg: P.limb(far_leg, 'pP', 'fl', 2)
     if far_boot: P.boot(*far_boot[:2], False, *far_boot[2:], leg=far_leg)
     put(P.fr, t, tx, ty)
@@ -252,12 +246,11 @@ def pose(hip=12, tx=5, torso='mid', head='normal', hdx=0, near_leg=None, far_leg
         for x in range(min(xs), max(xs) + 1): P.px(x, hip + 1, 'p', 'hip')
     if near_leg: P.limb(near_leg, 'PQ', 'nl', 2, sep='fl')
     if near_boot: P.boot(*near_boot[:2], True, *near_boot[2:], leg=near_leg)
+    if near_arm and near_behind: P.arm(near_arm, True)
     put(P.fr, HEAD[head], tx - 1 + hdx, ty - HEAD_H)
     if far_arm and far_front: P.arm(far_arm, False)
-    if gun == 'level': P.rifle(tx, ty, min(ty + 2 + gdy, 13), gx)
-    elif gun == 'raised': P.rifle(tx, ty, ty + 1, gx)
-    elif gun == 'back' and near_arm: P.arm(near_arm, True)
-    elif gun is None and near_arm: P.arm(near_arm, True)
+    if gun == 'raised': P.rifle(tx, ty, ty + 1, gx)
+    elif near_arm and not near_behind: P.arm(near_arm, True)
     fr = outline(P.fr)
     if shift: fr = [(['.'] * shift + row)[:16] if shift > 0 else (row[-shift:] + ['.'] * -shift) for row in fr]
     fr = Frame(fr); fr.arms = P.arm_lengths
@@ -267,68 +260,70 @@ def pose(hip=12, tx=5, torso='mid', head='normal', hdx=0, near_leg=None, far_leg
 LEGS_STAND = dict(far_leg=[(5, 13), (5, 14)], far_boot=(5, 15), near_leg=[(9, 13), (9, 14)], near_boot=(9, 15))
 LEGS_GIVE = dict(far_leg=[(5, 14)], far_boot=(4, 15), near_leg=[(9, 14)], near_boot=(9, 15))
 def hang(top, k=0): return [(4, top), (4, top + 1), (4 - k, top + 2)]                 # the far arm hanging, k: drifts back
-def stand(state=0, head='normal', far_arm=None, gun='level', gdy=0, far_front=False):
-    if state == 1:   # in: chest up, the shoulders and the rifle ride up with it, the far hand drifts out
-        return pose(hip=12, torso='tall', head=head, **LEGS_STAND, far_arm=far_arm or hang(7, 1), gun=gun, gdy=gdy, far_front=far_front)
+def hangn(top, k=0): return [(11, top), (11, top + 1), (11 + k, top + 2)]             # the near arm hanging, k: drifts out
+def stand(state=0, head='normal', far_arm=None, near_arm=None, gun=None, far_front=False, near_behind=False):
+    if state == 1:   # in: chest up, the shoulders ride up with it, the hands drift out
+        return pose(hip=12, torso='tall', head=head, **LEGS_STAND, far_arm=far_arm or hang(7, 1), near_arm=near_arm or hangn(7, 1), gun=gun, far_front=far_front, near_behind=near_behind)
     if state == 2:   # out: knees give, everything settles a pixel
-        return pose(hip=13, torso='mid', head=head, **LEGS_GIVE, far_arm=far_arm or hang(9), gun=gun, gdy=gdy, far_front=far_front)
-    return pose(hip=12, torso='mid', head=head, **LEGS_STAND, far_arm=far_arm or hang(8), gun=gun, gdy=gdy, far_front=far_front)
+        return pose(hip=13, torso='mid', head=head, **LEGS_GIVE, far_arm=far_arm or hang(9), near_arm=near_arm or hangn(9), gun=gun, far_front=far_front, near_behind=near_behind)
+    return pose(hip=12, torso='mid', head=head, **LEGS_STAND, far_arm=far_arm or hang(8), near_arm=near_arm or hangn(8), gun=gun, far_front=far_front, near_behind=near_behind)
 
 # idle one-shots, played by the game after a few seconds still
-SHADE = [(4, 7), (5, 6), (6, 5), (7, 4), (8, 4)]                                    # far hand up to the brow (in front), looking up the climb
-def tie(k):                                                              # far hand back at the knot, tugging the bandana
-    return stand(1, far_arm=[(4, 7), (3, 6), (3, 4 - k)])
-def flex(k, state=0):                                                    # checks the rifle: hitches it up, the far arm swings back
-    return stand(state, gdy=-k, far_arm=hang(8 if state == 0 else 7, 1 + k))
+SHADE = [(11, 7), (12, 6), (12, 5), (11, 4), (10, 4)]                               # near hand up to the brow, looking up the climb
+def tie(k):                                                              # both hands at the knot behind the head, tugging the bandana
+    return stand(1, near_behind=True, far_arm=[(4, 7), (2, 6), (2, 4 - k)], near_arm=[(11, 7), (12, 5 - k), (10, 3)])
+def flex(k, state=0):                                                    # near hand out front, shaking loose
+    hy = 8 if state == 0 else 7
+    return stand(state, near_arm=[(11, hy), (12, hy + 1), (13, hy + 1 - k), (14, hy + 1 - 2 * k)])
 
 # ---------------------------------------------------------------- air (gun level throughout)
 JUMP = [
     pose(hip=11, torso='mid', far_leg=[(5, 12), (5, 14)], far_boot=(5, 15, 'toe'), near_leg=[(8, 12), (8, 14)], near_boot=(8, 15, 'toe'),
-         far_arm=[(4, 7), (3, 5), (3, 3)]),                                                                          # take-off: long, far arm thrown up
+         far_arm=[(4, 7), (3, 5), (3, 3)], near_arm=[(11, 7), (12, 5), (12, 3)]),                                     # take-off: long, arms thrown up
     pose(hip=11, torso='mid', far_leg=[(5, 12), (6, 13)], far_boot=(5, 14, 'toe'), near_leg=[(8, 12), (10, 13)], near_boot=(9, 14),
-         far_arm=[(4, 7), (3, 6), (3, 4)]),                                                                          # rising: knees come up
+         far_arm=[(4, 7), (3, 6), (3, 4)], near_arm=[(11, 7), (12, 6), (13, 5)]),                                     # rising: knees come up
 ]
 FALL = [
     pose(hip=12, torso='short', far_leg=[(5, 13), (6, 14)], far_boot=(5, 15, 'toe'), near_leg=[(8, 13), (10, 14)], near_boot=(10, 15),
-         far_arm=[(4, 9), (2, 9), (1, 8)]),                                                                          # apex: floaty, far arm out, knees up
+         far_arm=[(4, 9), (2, 9), (1, 8)], near_arm=[(11, 9), (13, 9), (14, 8)]),                                     # apex: floaty, arms out, knees up
     pose(hip=12, torso='mid', far_leg=[(5, 13), (5, 14)], far_boot=(4, 15, 'toe'), near_leg=[(8, 13), (8, 14)], near_boot=(8, 15, 'toe'),
-         far_arm=[(4, 8), (3, 6), (3, 4)]),                                                                          # dropping: far arm up, legs hang
+         far_arm=[(4, 8), (3, 6), (3, 4)], near_arm=[(11, 8), (12, 6), (12, 4)]),                                     # dropping: arms up, legs hang
     pose(hip=12, torso='mid', far_leg=[(5, 13), (4, 14)], far_boot=(3, 15, 'toe'), near_leg=[(8, 13), (9, 14)], near_boot=(9, 15, 'toe'),
-         far_arm=[(4, 8), (2, 7), (2, 5)]),                                                                          # dropping: legs scissor, arm flaps
+         far_arm=[(4, 8), (2, 7), (2, 5)], near_arm=[(11, 8), (13, 7), (13, 5)]),                                     # dropping: legs scissor, arms flap out
 ]
 LAND = [
     pose(hip=14, torso='squash', head='down', far_leg=[(4, 15)], near_leg=[(9, 15)], far_boot=(3, 15), near_boot=(10, 15), hips=False,
-         far_arm=[(4, 12), (2, 13), (1, 13)], gdy=-2),                                                               # impact: flattened, rifle thrown up
-    pose(hip=13, torso='short', head='down', **LEGS_GIVE, far_arm=[(4, 10), (3, 11)], gdy=-1),                      # coming up
+         far_arm=[(4, 12), (2, 13), (1, 13)], near_arm=[(11, 12), (13, 13), (14, 13)]),                               # impact: flattened, arms out low
+    pose(hip=13, torso='short', head='down', **LEGS_GIVE, far_arm=[(4, 10), (3, 11)], near_arm=[(11, 10), (12, 11)]),   # coming up
     stand(1),                                                                                                       # a little overshoot
 ]
 HURT = pose(hip=13, torso='squash', head='down', far_leg=[(4, 14)], far_boot=(2, 15), near_leg=[(9, 14)], near_boot=(11, 15),
-            far_arm=[(4, 11), (2, 9), (1, 8)], gdy=-1)
+            far_arm=[(4, 11), (2, 9), (1, 8)], near_arm=[(11, 11), (13, 9), (14, 8)])
 DUCK = pose(hip=13, torso='short', head='down', far_leg=[(4, 14)], near_leg=[(9, 14)], far_boot=(3, 15), near_boot=(10, 15),
-            far_arm=[(4, 10), (4, 12)])                                                                             # squat, rifle low
+            far_arm=[(4, 10), (4, 12)], near_arm=[(11, 10), (11, 12)])                                              # squat, hands on knees
 LOOKUP = stand(1, 'up')
 SKID = pose(hip=13, tx=5, torso='short', hdx=1, far_leg=[(5, 14)], far_boot=(4, 15), near_leg=[(8, 14)], near_boot=(7, 15),
-            far_arm=[(4, 10), (2, 9), (1, 8)], gx=1)                                                                 # leaning back, heels dug in, rifle out front
+            far_arm=[(6, 10), (8, 10), (10, 9)], near_arm=[(11, 10), (13, 9), (14, 8)])                              # leaning back, heels dug in, arms out front
 
 # ---------------------------------------------------------------- dashes: a coil, then the body thrown along the dash
 COIL = pose(hip=13, torso='short', head='down', far_leg=[(5, 14)], far_boot=(3, 15), near_leg=[(9, 14)], near_boot=(9, 15),
-            far_arm=[(4, 10), (2, 11)])
+            far_arm=[(4, 10), (2, 11)], near_arm=[(10, 10), (8, 11), (7, 12)])
 DASH_SIDE = pose(hip=13, tx=5, torso='flat', hdx=3, far_leg=[(6, 14), (3, 15)], far_boot=(2, 15, 'toe', -1), near_leg=[(7, 14), (4, 14)], near_boot=(2, 14, 'toe', -1),
-                 far_arm=[(4, 12), (2, 12)], gx=2, gdy=-2)
+                 far_arm=[(9, 12), (7, 13)], near_arm=[(11, 12), (13, 12), (15, 11)])
 DASH_UP = pose(hip=13, torso='tall', far_leg=[(5, 14)], far_boot=(5, 15, 'toe'), near_leg=[(8, 14)], near_boot=(8, 15, 'toe'),
-               far_arm=[(4, 8), (3, 6), (3, 4)])
+               far_arm=[(4, 8), (3, 10), (3, 11)], near_arm=[(11, 8), (12, 5), (12, 2), (12, 0)])
 DASH_DOWN = pose(hip=12, torso='mid', head='down', far_leg=[(4, 13), (3, 14)], far_boot=(2, 15, 'flat', -1), near_leg=[(9, 13), (10, 14)], near_boot=(11, 15),
-                 far_arm=[(4, 8), (2, 7), (1, 6)], gdy=1)
+                 far_arm=[(4, 8), (3, 6), (3, 5)], near_arm=[(11, 8), (12, 6), (12, 5)])
 DASH_DIAG_UP = pose(hip=12, tx=5, torso='mid', hdx=2, far_leg=[(6, 13), (4, 14)], far_boot=(3, 15, 'toe'), near_leg=[(8, 13), (7, 14)], near_boot=(6, 15, 'toe'),
-                    far_arm=[(4, 9), (2, 10), (1, 11)], gdy=-1, gx=1)
+                    far_arm=[(6, 8), (4, 9), (3, 10)], near_arm=[(11, 8), (13, 5), (14, 3), (15, 2)])
 DASH_DIAG_DOWN = pose(hip=12, tx=5, torso='short', head='down', hdx=2, far_leg=[(5, 13), (6, 14)], far_boot=(6, 15), near_leg=[(8, 13), (10, 14)], near_boot=(11, 15),
-                      far_arm=[(4, 9), (2, 8), (1, 7)], gdy=1, gx=1)
+                      far_arm=[(5, 9), (3, 8)], near_arm=[(10, 9), (8, 7), (7, 6)])
 
 # ---------------------------------------------------------------- on the wall (the wall is to the right, from column 12)
-# rifle slung on the back, both hands grip the wall face at column 11, the feet push on it, near and far limbs climb in turn.
+# both hands grip the wall face at column 11, the feet push on it, near and far limbs climb in turn.
 def wall(dy, near_hand, far_hand, near_foot, far_foot, torso='mid', tx=4):
     hip = 12 + dy; top = hip - len(VEST[torso]) + 1
-    return pose(hip=hip, tx=tx, torso=torso, gun='back',
+    return pose(hip=hip, tx=tx, torso=torso,
                 far_arm=[(8, top), (10, top + 1), (11, far_hand)], near_arm=[(9, top), (10, top - 1), (11, top - 2), (11, near_hand), (12, near_hand)],
                 far_leg=[(5, hip + 1), (8, far_foot - 1)], far_boot=(10, far_foot, 'toe'), near_leg=[(6, hip + 1), (8, near_foot - 1)], near_boot=(10, near_foot, 'toe'))
 CLIMB = [
@@ -340,7 +335,7 @@ CLIMB = [
 HOLD = [wall(0, 5, 9, 15, 14), wall(0, 5, 9, 15, 14, torso='tall')]
 def slide(k):
     hip = 12; top = hip - 4
-    return pose(hip=hip, tx=3, torso='mid', gun='back', far_arm=[(6, top + 1), (9, top + 1), (11, top + 1 + k)], near_arm=[(8, top), (10, top + 1), (12, top + 1 - k)],
+    return pose(hip=hip, tx=3, torso='mid', far_arm=[(6, top + 1), (9, top + 1), (11, top + 1 + k)], near_arm=[(8, top), (10, top + 1), (12, top + 1 - k)],
                 far_leg=[(5, 13), (8, 14)], far_boot=(10, 14, 'toe'), near_leg=[(6, 13), (8, 15)], near_boot=(10, 15, 'toe'))
 
 # ---------------------------------------------------------------- aiming: the rifle up at the shoulder, the far hand on the foregrip
@@ -369,7 +364,7 @@ def wall_aim(k):
                 far_leg=[(5, 13), (4, 14)], far_boot=(3, 15, 'toe', -1), near_leg=[(8, 13), (9, 14)], near_boot=(9, 15))
 WALL_AIM = [wall_aim(0), wall_aim(1)]
 
-# ---------------------------------------------------------------- run: eight side-on frames, the rifle bounces a frame behind the body
+# ---------------------------------------------------------------- run: eight side-on frames, arms swing against the legs, the body bobs two rows
 def LG(row, s): return (row, G(s))
 RUN_LEGS = [   # per phase: hip (belt) row, lead leg, trail leg. L pants, K boot.
     (12, LG(13, """
@@ -408,7 +403,12 @@ RUN_LEGS = [   # per phase: hip (belt) row, lead leg, trail leg. L pants, K boot
 """)),                                                                   # up: lead pushes off the toe, trail reaches
 ]
 LEG_DX = 1                                                               # the stride grids sit one column left of his body
-ARM_DY = [-1, 0, 1, 0]                                                   # rifle and far arm: a frame behind the bob
+RUN_ARMS = [   # per phase, shoulders at (4, top) and (11, top): arm on the lead-leg side, the other arm
+    ([(0, 0), (-1, 1), (-2, 2), (-3, 2)], [(0, 0), (1, 1), (2, 1), (3, 0)]),
+    ([(0, 0), (-1, 1), (-2, 2)], [(0, 0), (1, 1), (2, 1)]),
+    ([(0, 0), (0, 1), (0, 2)], [(0, 0), (0, 1), (0, 2)]),
+    ([(0, 0), (1, 1), (2, 1), (3, 0)], [(0, 0), (-1, 1), (-2, 2), (-3, 2)]),
+]
 def leg_grid(P, lg, near):
     row, rows = lg; cells = []
     for r, s in enumerate(rows):
@@ -427,9 +427,10 @@ def run_frame(k, aim=False):
     ph = k % 4; near_leads = k < 4
     hip, lead, trail = RUN_LEGS[ph]
     near, far = (lead, trail) if near_leads else (trail, lead)
-    P = Pose(); t = VEST['mid']; ty = hip - len(t) + 1; tx = 5; ady = ARM_DY[ph]
-    if aim: pass
-    else: P.arm([(4, ty), (4 - (ady < 0), ty + 1), (4 + (ady > 0), ty + 2), (4 + (ady > 0), ty + 3)], False)   # the far arm swings a touch with the bounce
+    P = Pose(); t = VEST['mid']; ty = hip - len(t) + 1; tx = 5
+    lead_arm, other_arm = RUN_ARMS[ph]
+    near_arm, far_arm = (lead_arm, other_arm) if near_leads else (other_arm, lead_arm)
+    if not aim: P.arm([(4 + x, ty + y) for x, y in far_arm], False)                   # arms swing against the legs
     leg_grid(P, far, False)
     put(P.fr, t, tx, ty)
     for x in range(16):
@@ -437,7 +438,7 @@ def run_frame(k, aim=False):
     leg_grid(P, near, True)
     put(P.fr, HEAD['normal'], tx, ty - HEAD_H)                                       # head a column forward: the lean
     if aim: P.arm(GRIP(ty), False); P.rifle(tx, ty, ty + 1)
-    else: P.rifle(tx, ty, ty + 2 + ady)
+    else: P.arm([(11 + x, ty + y) for x, y in near_arm], True)
     fr = Frame(outline(P.fr)); fr.arms = P.arm_lengths
     return fr
 
@@ -449,7 +450,7 @@ def exit_frames():
 ANIMS = [
     ('idle', 6, True, [stand(0), stand(0), stand(1), stand(1), stand(1, 'up'), stand(0), stand(2), stand(2)]),
     ('run', 14, True, [run_frame(k) for k in range(8)]),
-    ('idle_look', 4, False, [stand(1, 'up'), stand(1, 'up', far_arm=SHADE, far_front=True), stand(1, 'up', far_arm=SHADE, far_front=True), stand(1, 'up', far_arm=SHADE, far_front=True), stand(1, 'up'), stand(0)]),
+    ('idle_look', 4, False, [stand(1, 'up'), stand(1, 'up', near_arm=SHADE), stand(1, 'up', near_arm=SHADE), stand(1, 'up', near_arm=SHADE), stand(1, 'up'), stand(0)]),
     ('idle_tie', 6, False, [stand(1), tie(0), tie(1), tie(0), tie(1), stand(1), stand(0)]),
     ('idle_flex', 8, False, [stand(0), flex(0), flex(1), flex(0, 1), flex(1, 1), flex(0), stand(0)]),
     ('jump_up', 12, False, JUMP),
@@ -480,7 +481,7 @@ def hexrgb(h): h = h.lstrip('#'); return tuple(int(h[i:i + 2], 16) for i in (0, 
 def write(anims=None):
     anims = anims or ANIMS
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    manifest = {'design': 'Army guy: red bandana, olive vest, blue pants, rifle held level (tails simulated in the game)', 'dashIndicator': {'feature': 'Bandana', 'hex': C['B']},
+    manifest = {'design': 'Army guy: red bandana, olive vest, blue pants, rifle out only to shoot (tails simulated in the game)', 'dashIndicator': {'feature': 'Bandana', 'hex': C['B']},
                 'palette': {k: {'name': NAMES[k], 'hex': C[k]} for k in C}, 'animations': []}
     for name, fps, loop, frames in anims:
         im = Image.new('RGBA', (16 * len(frames), 16), (0, 0, 0, 0))

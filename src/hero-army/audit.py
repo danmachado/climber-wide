@@ -1,5 +1,5 @@
-# Quality test for the army guy pack (adapted from hero-wolf/audit.py: his chin is one row deeper below the band, the vest
-# is drawn three-quarter so it is wider than a side-on shirt, and the arms bounce with the rifle instead of swinging). Reads what the game ships (the hero-*.png strips and the manifest), not draw.py,
+# Quality test for the army guy pack (adapted from hero-wolf/audit.py: his chin is one row deeper below the band, and the
+# vest is drawn three-quarter so it is wider than a side-on shirt). Reads what the game ships (the hero-*.png strips and the manifest), not draw.py,
 # and fails if any frame breaks the rules below. Run after draw.py:   python3 audit.py      (exit code 1 on failure)
 #
 #   one piece      every frame is a single connected sprite: no floating head, no loose legs or hands
@@ -9,7 +9,7 @@
 #   feet           grounded animations keep a boot on the bottom row in every frame
 #   idle alive     the idle moves the body, not just the head: chest, shoulders, arms and legs change, and the head
 #                  always moves with the torso (same offset), never on its own
-#   run cycle      the two boots swap front and back (a real stride), the rifle and hand bounce with the stride,
+#   run cycle      side-on body; the two boots swap front and back (a real stride), the arms swing against the legs,
 #                  the body bobs, and no two frames in a row are the same
 #   squash/stretch landing and spawn start shorter than standing, take-off is taller or the same
 #   arm length     every arm is 4 pixels shoulder to hand, 5 when reaching (from the manifest's per-frame arm lengths)
@@ -152,13 +152,17 @@ belts = [band_row(g) for g in run]
 if len(set(belts)) < 2: bad('run', 'the body does not bob')
 for i in range(len(run)):
     if run[i] == run[(i + 1) % len(run)]: bad('run', 'frames %d and %d are the same' % (i, (i + 1) % len(run)))
-hand_y = [[y for x, y, c in body(g) if c == 's' and x >= 11] for g in run]                 # the lit hand under the barrel
-hand_y = [min(v) if v else None for v in hand_y]
-if None in hand_y or max(hand_y) - min(hand_y) < 1: bad('run', 'the rifle hand does not bounce (y %s)' % hand_y)
+near_arm = [centre([(x, y) for x, y, c in body(g) if c in 'sS' and x >= 8 and y > band_row(g) + CHIN + 1]) for g in run]   # his chest and shoulders show skin too: the arm is the skin on the near side under the vest's top row
+if None in near_arm or max(near_arm) - min(near_arm) < 3: bad('run', 'the near arm does not swing (x %s)' % near_arm)
+else:
+    pairs = [(a, l) for a, l in zip(near_arm, nb) if l is not None]
+    ma = sum(a for a, l in pairs) / len(pairs); ml = sum(l for a, l in pairs) / len(pairs)
+    corr = sum((a - ma) * (l - ml) for a, l in pairs)
+    if corr >= 0: bad('run', 'the near arm swings with the near leg instead of against it')
 widths = [len({x for x, y in cells(g, 'vhH')}) for g in run]
 if max(widths) > 6: bad('run', 'the vest is wider than standing (%d wide)' % max(widths))
 if not any(f.startswith('run ') for f in fails):
-    ok('run', 'boots swap (near-far %s), bob rows %s, rifle hand bounces %d px' % ([round(v) for v in d], sorted(set(belts)), max(hand_y) - min(hand_y)))
+    ok('run', 'boots swap (near-far %s), bob rows %s, arm swing %.0f px against the legs' % ([round(v) for v in d], sorted(set(belts)), max(near_arm) - min(near_arm)))
 
 # ---- squash and stretch ----
 def height(g): ys = [y for x, y in cells(g)]; return max(ys) - min(ys) + 1
