@@ -2255,7 +2255,7 @@
   }
   function killFoe(f, dir, how) {
     if (f.state === 'dead') return;
-    f.state = 'dead'; combat.stop = P.hitStop * (f.big ? 2 : 1); addShake(f.big ? 3 : 1.5, f.big ? 0.25 : 0.12); rumble(f.big ? 0.75 : 0.3, f.big ? 0.6 : 0.45, f.big ? 220 : 100);
+    f.state = 'dead'; combat.stop = P.hitStop * (f.big ? 2 : 1); addShake(f.big ? 3 : 1.5, f.big ? 0.25 : 0.12); rumble(f.big ? 0.75 : 0.3, f.big ? 0.6 : 0.45, f.big ? 220 : 100); sfx('hit');
     var fw = f.big ? FOES.heavy.w : FOES.frame, fh = f.big ? FOES.heavy.h : FOES.frame, cx = f.big ? FOES.heavy.cx : fw / 2, mid = Math.round(f.x + f.w / 2);
     pushEv({ kind: 'gib', x: f.x + f.w / 2, y: f.y + (f.big ? 10 : 4), dir: dir, how: how || 'shot', big: f.big, face: f.dir,
              fx: f.dir > 0 ? mid - cx : mid - (fw - 1 - cx), fy: f.y + f.h - fh, fw: fw });   // where his picture was, so his body parts start there
@@ -2273,7 +2273,7 @@
   function blowBarrel(bl) {
     bl.state = 'gone';
     var cx = bl.x + bl.w / 2, cy = bl.y + bl.h / 2, i;
-    pushEv({ kind: 'blast', x: cx, y: cy }); addShake(3, 0.25); combat.stop = P.hitStop * 1.5; rumble(1, 0.7, 320);
+    pushEv({ kind: 'blast', x: cx, y: cy }); addShake(3, 0.25); combat.stop = P.hitStop * 1.5; rumble(1, 0.7, 320); sfx('blast');
     for (i = 0; i < foes.length; i++) { var f = foes[i]; if (f.state !== 'dead' && Math.hypot(f.x + f.w / 2 - cx, f.y + f.h / 2 - cy) < P.blastR + (f.big ? 10 : 0)) hurtFoe(f, f.x + f.w / 2 < cx ? -1 : 1, f.big ? P.heavyBlast : 1, 'blast', cy); }
     for (i = 0; i < barrels.length; i++) { var o = barrels[i]; if (o.state === 'idle' && Math.hypot(o.x + o.w / 2 - cx, o.y + o.h / 2 - cy) < P.blastR) { o.state = 'lit'; o.t = P.barrelChain; } }
     if (!pl.dead && fx.mode === 'none' && Math.hypot(pl.x + pl.w / 2 - cx, pl.y + pl.h / 2 - cy) < P.blastR - 4) die();
@@ -2442,6 +2442,61 @@
   // redrawing it, so it costs the frame nothing extra. size is in game pixels, time in seconds.
   var shake = { t: 0, size: 0, n: 0, last: '', pull: 0, len: 0 };
   function addShake(size, time, pull) { if (size >= shake.size || shake.t <= 0) { shake.size = size; shake.t = shake.len = time; shake.pull = pull || 0; } }
+  // ---- sound: small effects made on the spot with WebAudio (no files), one Settings switch (climberwide.sound.v1) ----
+  // Every effect is nudged to a random pitch between 0.92 and 1.09 so repeats never sound like a machine. Nothing here reads
+  // or changes the physics, and the idle demo, the builder's test play and headless runs stay silent. Browsers keep sound
+  // locked until the first key press or click, so effects before that are simply dropped.
+  var SND_KEY = 'climberwide.sound.v1', soundOn = true, actx = null, amaster = null, anoise = null;
+  try { soundOn = localStorage.getItem(SND_KEY) !== '0'; } catch (e) {}
+  function setSound(on) { soundOn = on; try { localStorage.setItem(SND_KEY, on ? '1' : '0'); } catch (e) {} if (on) sfx('gem'); }
+  function audioReady() {
+    if (!soundOn) return false;
+    if (!actx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      try {
+        actx = new AC(); amaster = actx.createGain(); amaster.gain.value = 0.16; amaster.connect(actx.destination);
+        anoise = actx.createBuffer(1, actx.sampleRate >> 1, actx.sampleRate);
+        var nd = anoise.getChannelData(0); for (var ni = 0; ni < nd.length; ni++) nd[ni] = Math.random() * 2 - 1;
+      } catch (e) { actx = null; soundOn = false; return false; }
+    }
+    if (actx.state !== 'running') { try { var rp = actx.resume(); if (rp && rp.catch) rp.catch(function () {}); } catch (e) {} return false; }
+    return true;
+  }
+  function tone(type, f0, f1, dur, vol, delay, pm) {
+    var t = actx.currentTime + (delay || 0), o = actx.createOscillator(), gn = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0 * pm, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1 * pm, t + dur);
+    gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(gn); gn.connect(amaster); o.start(t); o.stop(t + dur + 0.03);
+  }
+  function hiss(f0, f1, dur, vol, q, pm) {                  // a burst of noise through a band that sweeps from f0 to f1
+    var t = actx.currentTime, s = actx.createBufferSource(), fl = actx.createBiquadFilter(), gn = actx.createGain();
+    s.buffer = anoise; fl.type = 'bandpass'; fl.Q.value = q; fl.frequency.setValueAtTime(f0 * pm, t); fl.frequency.exponentialRampToValueAtTime(f1 * pm, t + dur);
+    gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(fl); fl.connect(gn); gn.connect(amaster); s.start(t); s.stop(t + dur + 0.03);
+  }
+  function sfx(name, amt) {
+    if (demo.on || embedded || !audioReady()) return;
+    var pm = 0.92 + Math.random() * 0.17, a = amt === undefined ? 1 : amt;
+    switch (name) {
+      case 'jump':   tone('square', 300, 560, 0.1, 0.5, 0, pm); break;
+      case 'wall':   tone('square', 360, 660, 0.1, 0.45, 0, pm); break;
+      case 'bounce': tone('triangle', 260, 900, 0.17, 0.7, 0, pm); break;
+      case 'dash':   hiss(2600, 600, 0.17, 1.1, 1.2, pm); tone('sawtooth', 220, 120, 0.1, 0.15, 0, pm); break;
+      case 'grab':   tone('square', 190, 150, 0.05, 0.35, 0, pm); break;
+      case 'land':   hiss(420, 120, 0.07 + a * 0.1, 0.35 + a * 0.7, 0.8, pm); if (a > 0.5) tone('sine', 120, 55, 0.14, 0.7 * a, 0, pm); break;
+      case 'spring': tone('triangle', 200, 1100, 0.24, 0.75, 0, pm); break;
+      case 'die':    tone('sawtooth', 420, 70, 0.36, 0.5, 0, pm); hiss(1800, 200, 0.3, 0.9, 0.9, pm); break;
+      case 'refill': tone('square', 660, 660, 0.06, 0.35, 0, pm); tone('square', 990, 990, 0.09, 0.35, 0.06, pm); break;
+      case 'gem':    tone('triangle', 880, 880, 0.08, 0.55, 0, pm); tone('triangle', 1320, 1320, 0.18, 0.55, 0.08, pm); break;
+      case 'door':   tone('square', 400, 400, 0.06, 0.4, 0, pm); tone('square', 600, 600, 0.06, 0.4, 0.06, pm); tone('square', 800, 800, 0.1, 0.4, 0.12, pm); break;
+      case 'exit':   tone('square', 523, 523, 0.08, 0.4, 0, pm); tone('square', 659, 659, 0.08, 0.4, 0.08, pm); tone('square', 784, 784, 0.08, 0.4, 0.16, pm); tone('square', 1046, 1046, 0.2, 0.4, 0.24, pm); break;
+      case 'shoot':  tone('square', 900, 220, 0.07, 0.3, 0, pm); break;
+      case 'hit':    hiss(2000, 300, 0.13, 0.9, 0.9, pm); tone('sawtooth', 200, 60, 0.15, 0.4, 0, pm); break;
+      case 'blast':  hiss(800, 60, 0.5, 1.5, 0.7, pm); tone('sine', 90, 35, 0.42, 0.9, 0, pm); break;
+    }
+  }
   function moveX(amount) {
     pl.rx += amount;
     var move = Math.round(pl.rx);
@@ -2484,7 +2539,7 @@
     pl.varJumpTimer = P.varJumpTime;
     var under = hitMover(pl.x, pl.y + 1, pl.w, pl.h);
     pl.vx += P.jumpHBoost * mx + (under ? under.vx : 0); // a moving platform lends its speed to the jump
-    pl.vy = P.jumpSpeed; pl.varJumpSpeed = pl.vy;
+    pl.vy = P.jumpSpeed; pl.varJumpSpeed = pl.vy; sfx('jump');
   }
   // Wall jump. With a direction held it pushes you off the wall for a moment (you cannot steer straight back).
   // With nothing held it is a neutral jump: same launch, but you can turn back to the wall at once, which lets
@@ -2494,7 +2549,7 @@
     pl.varJumpTimer = P.varJumpTime;
     pl.vx = P.wallJumpH * dir; pl.vy = P.jumpSpeed; pl.varJumpSpeed = pl.vy;
     if (!neutral) { pl.forceMove = P.wallJumpForce; pl.forceDir = dir; }
-    pl.facing = dir;
+    pl.facing = dir; sfx('wall');
   }
   // Wall bounce: jump during an upward dash while beside a wall. A tall launch away from the wall; delaying the
   // jump makes it taller. The dash it started with is already paid for, so it costs nothing more.
@@ -2502,7 +2557,7 @@
     pl.jumpBuf = 0; pl.coyote = 0; pl.state = 'normal'; pl.boostT = 0; pl.mantle = null;
     pl.vx = P.bounceH * dir; pl.vy = P.bounceV; pl.varJumpSpeed = pl.vy; pl.varJumpTimer = P.bounceVarTime;
     pl.forceMove = P.bounceForce; pl.forceDir = dir; pl.facing = dir;
-    addShake(1.5, 0.12); rumble(0.35, 0.45, 110);
+    addShake(1.5, 0.12); rumble(0.35, 0.45, 110); sfx('bounce');
   }
   function startDash(inp) {
     var dx = inp.x, dy = inp.y;
@@ -2514,11 +2569,11 @@
     pl.state = 'dash'; pl.dashTimer = P.dashTime; pl.freeze = P.dashFreeze; pl.dashN = (pl.dashN || 0) + 1;
     pl.stamina -= P.dashCost; pl.dashes = 0; pl.dashCooldown = P.dashCooldown; pl.dashBuf = 0;
     pl.varJumpTimer = 0; pl.forceMove = 0; pl.mantle = null;
-    rumble(0.15, 0.4, 90);                                      // a dash: a short buzz
+    rumble(0.15, 0.4, 90); sfx('dash');                         // a dash: a short buzz
   }
   function die() {
     if (pl.dead) return;
-    pl.dead = true; run.deaths++; addShake(1.5, 0.12); rumble(0.8, 0.5, 240);
+    pl.dead = true; run.deaths++; addShake(3, 0.2); rumble(0.8, 0.5, 240); sfx('die');
     for (var gi = 0; gi < gems.length; gi++) if (gems[gi].state === 'follow') { gems[gi].state = 'idle'; gems[gi].fx = gems[gi].x; gems[gi].fy = gems[gi].y; }   // a gem not yet banked goes back
     fx = { mode: 'die', t: 0, x: pl.x, y: Math.min(pl.y, rows * T - pl.h), facing: pl.facing };
   }
@@ -2559,6 +2614,7 @@
     pl.onGround = pl.vy >= 0 && hit(pl.x, pl.y + 1);
     // a hard landing: only after a real drop (measured from the highest point of the fall), never after a normal jump
     if (pl.onGround && !wasGround && pl.y - pl.peakY >= 70) addShake(pl.y - pl.peakY >= 130 ? 2 : 1.5, 0.12);
+    if (pl.onGround && !wasGround && pl.y - pl.peakY >= 8) sfx('land', Math.min(1, (pl.y - pl.peakY) / 130));   // a thud that grows with the drop
     if (pl.onGround || pl.state === 'climb' || pl.peakY === undefined || pl.y < pl.peakY) pl.peakY = pl.y;
     if (shake.t > 0) shake.t -= dt;
     pl.floor = pl.onGround ? surface(pl.x, pl.y + pl.h, pl.w, 1) : '';
@@ -2582,7 +2638,7 @@
         pl.jumpBuf = 0; pl.coyote = 0; pl.state = 'normal'; pl.dashTimer = 0; pl.forceMove = 0;
         pl.vx = (hyper ? P.hyperH : P.superH) * hd; pl.vy = P.jumpSpeed * (hyper ? P.hyperV : 1);
         pl.varJumpSpeed = pl.vy; pl.varJumpTimer = P.varJumpTime; pl.facing = hd;
-        addShake(1, 0.1);
+        addShake(1, 0.1); sfx('bounce');
       }
       if (pl.state === 'dash' && ++pl.trailTick % 2 === 0) pl.trail.push({ x: pl.x, y: pl.y, life: 0.3, facing: pl.facing, dx: pl.dashDirX, dy: pl.dashDirY });
       if (pl.state === 'dash' && pl.dashTimer <= 0) {       // the dash runs out on its own (a super or hyper has already ended it)
@@ -2629,7 +2685,7 @@
       var grabDir = inp.x || pl.facing;
       if (!mant && inp.grab && pl.stamina > 0 && pl.vy >= 0 && pl.forceMove <= 0 && touching(grabDir, 2) &&
           surface(grabDir > 0 ? pl.x + pl.w : pl.x - 2, pl.y, 2, pl.h) !== 'ice') {
-        addShake(1.5, 0.14, grabDir);              // catching a wall: one soft pull toward it, no rattle
+        addShake(1.5, 0.14, grabDir); sfx('grab');   // catching a wall: one soft pull toward it, no rattle
         pl.state = 'climb'; pl.climbDir = grabDir; pl.facing = grabDir; pl.vx = 0; pl.vy *= 0.2; pl.wallSlide = P.wallSlideTime; pl.boostT = 0;
         if (!touching(grabDir, 1)) pl.x += grabDir;
       } else {
@@ -2671,13 +2727,13 @@
         pl.state = 'normal'; pl.vy = P.springV; pl.varJumpSpeed = pl.vy; pl.varJumpTimer = P.varJumpTime;
         pl.stamina = P.stamina; pl.dashCooldown = 0; pl.forceMove = 0; pl.boostT = 0; pl.jumpBuf = 0; pl.coyote = 0; pl.mantle = null;
         if (pl.y + pl.h > sp.y + 3) pl.y = sp.y + 3 - pl.h;
-        sp.t = 0.25; addShake(1, 0.1); rumble(0.25, 0.55, 130);
+        sp.t = 0.25; addShake(1, 0.1); rumble(0.25, 0.55, 130); sfx('spring');
       }
     }
     for (i = 0; i < gems.length; i++) {              // gems: touch one and it follows you; it is yours once you stand on solid ground
       var gm = gems[i];
       if (gm.state === 'idle' && overlap({ x: gm.x + 1, y: gm.y + 1, w: T - 2, h: T - 2 }, pl.x, pl.y, pl.w, pl.h)) gm.state = 'follow';
-      else if (gm.state === 'follow' && pl.onGround && pl.floor !== 'ice') { gm.state = 'got'; gm.fx = pl.x; gm.fy = pl.y - 12; gm.pop = 0.4; }
+      else if (gm.state === 'follow' && pl.onGround && pl.floor !== 'ice') { gm.state = 'got'; gm.fx = pl.x; gm.fy = pl.y - 12; gm.pop = 0.4; sfx('gem'); }
     }
     for (i = 0; i < roomKeys.length; i++) {          // keys: touch one and it follows you; it opens the first closed door you reach
       var ky = roomKeys[i];
@@ -2685,7 +2741,7 @@
       else if (ky.state === 'follow') {
         for (var di = 0; di < doors.length; di++) {
           var dr = doors[di];
-          if (!dr.open && overlap({ x: dr.x - 1, y: dr.y - 1, w: T + 2, h: T + 2 }, pl.x, pl.y, pl.w, pl.h)) { openDoor(dr); ky.state = 'used'; addShake(1, 0.1); break; }
+          if (!dr.open && overlap({ x: dr.x - 1, y: dr.y - 1, w: T + 2, h: T + 2 }, pl.x, pl.y, pl.w, pl.h)) { openDoor(dr); ky.state = 'used'; addShake(1, 0.1); sfx('door'); break; }
         }
       }
     }
@@ -2697,7 +2753,7 @@
     if (inp.shoot && pl.shotCD <= 0 && canShoot()) {
       pl.shotCD = P.shotRate; pl.gunT = P.gunHold; pl.shotT = 0;
       var sd = shotDir(); pl.shotDir = sd;
-      shots.push({ x: sd > 0 ? pl.x + pl.w + 2 : pl.x - 6, y: pl.y + 3, vx: sd * P.shotSpeed, dist: 0 });
+      shots.push({ x: sd > 0 ? pl.x + pl.w + 2 : pl.x - 6, y: pl.y + 3, vx: sd * P.shotSpeed, dist: 0 }); sfx('shoot');
       rumble(0, 0.18, 35);                                  // a tick in the hand for each shot
     }
     for (i = 0; i < foes.length; i++) {
@@ -2713,11 +2769,11 @@
     for (i = 0; i < refills.length; i++) {
       var rf = refills[i];
       if (rf.timer <= 0 && pl.stamina < P.stamina && overlap(rf, pl.x, pl.y, pl.w, pl.h)) {   // a pickup fills the meter in mid-air
-        pl.dashes = 1; pl.stamina = P.stamina; rf.timer = P.refillRespawn; rumble(0, 0.3, 70);
+        pl.dashes = 1; pl.stamina = P.stamina; rf.timer = P.refillRespawn; rumble(0, 0.3, 70); sfx('refill');
       }
     }
     for (i = 0; i < exits.length; i++) if (overlap(exits[i], pl.x, pl.y, pl.w, pl.h)) {
-      if (!testMode && !demo.on) { fx = { mode: 'exit', t: 0, x: pl.x, y: pl.y, facing: pl.facing }; return; }
+      if (!testMode && !demo.on) { fx = { mode: 'exit', t: 0, x: pl.x, y: pl.y, facing: pl.facing }; sfx('exit'); return; }
       run.won = true;
       if (demo.on) { var dp = parOf(room); run.result = { stars: 1 + (run.deaths <= STAR_FALLS ? 1 : 0) + (run.time <= dp ? 1 : 0) + (gotGem() ? 1 : 0), par: dp, gems: gems.length > 0, next: false, pick: -1, py: 0, demo: true }; }
       if (embedded) window.parent.postMessage({ type: 'climber-result', won: true, time: run.time, deaths: run.deaths }, '*');
@@ -3512,7 +3568,7 @@
     tick++; applyShake();
     if (scene === 'play') applyCam();
     if (scene !== 'play') {
-      var ssig = [scene, hero.ready, menuNote, set.page, set.row, weather.on, shakeOn, cityOn, set.mode, set.action, set.note, set.lit, padVer, (firstPad() || {}).id, hud.width, sel.menu, sel.w, sel.i, dataVer, usedPad, check, fps.now, wiz.on, wiz.i, wiz.armed, wiz.on ? wiz.see : ''].join('|');
+      var ssig = [scene, hero.ready, menuNote, set.page, set.row, weather.on, shakeOn, cityOn, soundOn, set.mode, set.action, set.note, set.lit, padVer, (firstPad() || {}).id, hud.width, sel.menu, sel.w, sel.i, dataVer, usedPad, check, fps.now, wiz.on, wiz.i, wiz.armed, wiz.on ? wiz.see : ''].join('|');
       if (ssig !== lastSig) { lastSig = ssig; drawScreen(); blitHud(); }
       drawWeather();
       return;
@@ -4068,6 +4124,7 @@
     easeScale(dt);
     if (air) hero.fallV = Math.max(hero.fallV, pl.vy);
     if (hero.wasAir && !air) { hero.landT = 0.17; var kq = Math.min(1, Math.max(0, (hero.fallV - 120) / 300)); if (kq > 0) { rumble(0.35 * kq, 0.3 + 0.3 * kq, 50 + Math.round(80 * kq)); squash(1 + 0.6 * kq, 1 - 0.6 * kq); puff(pl.x + 1, pl.y + pl.h, 2 + Math.round(kq * 3), -25, -15); puff(pl.x + pl.w - 1, pl.y + pl.h, 2 + Math.round(kq * 3), 25, -15); } hero.fallV = 0; }   // land: squash by how hard, dust both ways
+    if (!hero.wasAir && air && pl.vy < 0 && pl.state === 'normal' && pl.vy > -400) { puff(pl.x + 1, pl.y + pl.h, 2, -20, -8); puff(pl.x + pl.w - 1, pl.y + pl.h, 2, 20, -8); }   // takeoff: a little dust from both boots
     if (!hero.wasAir && air && pl.vy < 0) squash(pl.vy < -260 ? 0.5 : 0.6, pl.vy < -260 ? 1.5 : 1.4);                  // jump or spring: stretch
     if (hero.wasState === 'climb' && pl.state !== 'climb' && air && pl.vy < 0 && !pl.mantle) squash(0.6, 1.4);            // climb jump (a mantle gets no stretch)
     if (hero.wasState !== 'dash' && pl.state === 'dash') { var ad = Math.abs(pl.dashDirX) > 0.3 && Math.abs(pl.dashDirY) > 0.3; squash(ad ? 1.15 : (Math.abs(pl.dashDirX) > 0.3 ? 1.3 : 0.7), ad ? 0.85 : (Math.abs(pl.dashDirX) > 0.3 ? 0.7 : 1.3)); }   // dash: stretch along it
@@ -4537,7 +4594,8 @@
   // and the speed readout). Back from a page returns to the list, back from the list returns to the menu.
   var set = { page: 'top', row: 0, topRow: 0, mode: 'idle', action: '', armed: false, quiet: 0, wait: 0, note: '', lit: '' };
   var SET_PAGES = {
-    top: { title: 'SETTINGS', rows: [['controls', 'CONTROLS', 'BUTTONS AND CONTROLLER SETUP'], ['graphics', 'GRAPHICS', 'EFFECTS AND THE SPEED READOUT'], ['theme', 'THEME', 'ORIGINAL, GAME BOY OR BLACK AND WHITE'], ['back', 'BACK', 'BACK TO THE MENU']] },
+    top: { title: 'SETTINGS', rows: [['controls', 'CONTROLS', 'BUTTONS AND CONTROLLER SETUP'], ['graphics', 'GRAPHICS', 'EFFECTS AND THE SPEED READOUT'], ['theme', 'THEME', 'ORIGINAL, GAME BOY OR BLACK AND WHITE'], ['sound', 'SOUND', 'EFFECTS ON OR OFF'], ['back', 'BACK', 'BACK TO THE MENU']] },
+    sound: { title: 'SOUND', rows: [['snd', 'EFFECTS', 'JUMPS, DASHES, HITS AND PICKUPS'], ['back', 'BACK', 'BACK TO SETTINGS']] },
     theme: { title: 'THEME', rows: [['t-original', 'ORIGINAL', 'THE GAME IN FULL COLOUR'], ['t-gb', 'GAME BOY', 'FOUR GREENS. THE FAST MODE FOR THE FRAME'], ['t-bw', 'BLACK AND WHITE', 'GAME BOY FLIPPED FOR NIGHT. ALSO FAST'], ['back', 'BACK', 'BACK TO SETTINGS']] },
     controls: { title: 'CONTROLS', rows: ACTIONS.map(function (a) { return [a[0], a[1], 'act']; }).concat([['rumble', 'RUMBLE', 'THE CONTROLLER SHAKES ON DASHES, LANDINGS, HITS AND FALLS'], ['redo', 'REDO SETUP', 'LEARN WHICH BUTTON IS WHICH AGAIN'], ['reset', 'RESET BUTTONS', 'BACK TO THE STARTING JOBS'], ['back', 'BACK', 'BACK TO SETTINGS']]) },
     graphics: { title: 'GRAPHICS', rows: [['fx', 'PARTICLES', 'WEATHER DRAWN OVER THE ROOM'], ['shake', 'SHAKE', 'A SMALL KICK ON HARD LANDINGS AND HITS'], ['city', 'CITY LIFE', 'WINDOWS TRAFFIC AND STEAM IN NEON ROW'], ['para', 'PARALLAX', 'THE BACKDROP MOVES IN DEPTH'],
@@ -4555,6 +4613,7 @@
     if (id === 'shake') return shakeOn ? 'ON' : 'OFF';
     if (id === 'city') return cityOn ? 'ON' : 'OFF';
     if (id === 'para') return para.on ? 'ON' : 'OFF';
+    if (id === 'snd') return soundOn ? 'ON' : 'OFF';
     if (id === 'speed') return check === 1 ? 'ON' : 'OFF';
     if (id === 'rumble') return rumbleOn ? 'ON' : 'OFF';
     if (id === 't-original') return GB.on ? '' : 'ON';
@@ -4576,6 +4635,7 @@
     if (id === 'shake') { setShake(!shakeOn); set.note = shakeOn ? 'SCREEN SHAKE ON' : 'SCREEN SHAKE OFF. CHECK THE SPEED READOUT.'; return; }
     if (id === 'city') { setCity(!cityOn); set.note = cityOn ? 'CITY LIFE ON. CHECK THE SPEED READOUT.' : 'CITY LIFE OFF. THE CITY STANDS STILL.'; return; }
     if (id === 'fx') { setWeather(!weather.on); set.note = weather.on ? 'PARTICLES ON. CHECK THE SPEED READOUT.' : 'PARTICLES OFF'; return; }
+    if (id === 'snd') { setSound(!soundOn); set.note = soundOn ? 'SOUND ON. STARTS AFTER THE FIRST BUTTON PRESS.' : 'SOUND OFF'; return; }
     if (id === 'speed') { check = check === 1 ? 0 : 1; set.note = check ? 'SPEED READOUT ON' : 'SPEED READOUT OFF'; return; }
     if (id === 't-original' || id === 't-gb' || id === 't-bw') {    // a theme is set up as the page loads, so a change saves it and reloads onto this page
       var want = id.substring(2);
@@ -4686,10 +4746,10 @@
     }
     if (set.page === 'top') {
       for (i = 0; i < rows.length; i++) {
-        y = 48 + i * 36 + (rows[i][0] === 'back' ? 12 : 0);                                     // a gap before BACK
-        row(i, MX - 100, y, 200, 30, rows[i][1], '');
+        y = 48 + i * 32 + (rows[i][0] === 'back' ? 10 : 0);                                     // a gap before BACK
+        row(i, MX - 100, y, 200, 28, rows[i][1], '');
       }
-      pxText(rows[set.row][2], MX, 214, 1, C.text, 'center');
+      pxText(rows[set.row][2], MX, 226, 1, C.text, 'center');
     } else if (set.page === 'theme') {
       for (i = 0; i < rows.length; i++) {
         y = 44 + i * 28 + (rows[i][0] === 'back' ? 10 : 0);
@@ -4707,7 +4767,7 @@
         GB.live = true;
       }
       pxText('THE GAME RELOADS TO SWITCH', MX, 222, 1, C.dim, 'center');
-    } else if (set.page === 'graphics') {
+    } else if (set.page === 'graphics' || set.page === 'sound') {
       for (i = 0; i < rows.length; i++) {
         y = 44 + i * 28 + (rows[i][0] === 'back' ? 10 : 0);
         row(i, MX - 150, y, 300, 24, rows[i][1], setValue(rows[i][0]));
