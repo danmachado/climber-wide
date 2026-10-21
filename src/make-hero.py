@@ -8,7 +8,7 @@ def rgb(h): h = h.lstrip('#'); return [int(h[i:i+2], 16) for i in (0, 2, 4)]
 #   'hero'           the earlier human with the orange hat (sprite pack in hero/)
 #   'hero-wolf'      the lone climber with the bandana (drawn in code by hero-wolf/draw.py; the tails are simulated in the game)
 #   'hero-army'      the army guy with the rifle (Dan's armyguy.png, posed by hero-army/draw.py; tails simulated in the game)
-HERO_CHOICE = 'hero-wolf'
+HERO_CHOICE = 'hero-army'
 
 # colour roles per pack: the game recolours these for "dash used" and "tired", and takes its effect colours from here
 ROLES = {
