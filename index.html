@@ -2446,7 +2446,7 @@
   // Every effect is nudged to a random pitch between 0.92 and 1.09 so repeats never sound like a machine. Nothing here reads
   // or changes the physics, and the idle demo, the builder's test play and headless runs stay silent. Browsers keep sound
   // locked until the first key press or click, so effects before that are simply dropped.
-  var SND_KEY = 'climberwide.sound.v1', soundOn = true, actx = null, amaster = null, anoise = null;
+  var SND_KEY = 'climberwide.sound.v1', soundOn = true, actx = null, amaster = null, anoise = null, adist = null, abus = null;
   try { soundOn = localStorage.getItem(SND_KEY) !== '0'; } catch (e) {}
   function setSound(on) { soundOn = on; try { localStorage.setItem(SND_KEY, on ? '1' : '0'); } catch (e) {} if (on) sfx('gem'); }
   function audioReady() {
@@ -2455,7 +2455,11 @@
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return false;
       try {
-        actx = new AC(); amaster = actx.createGain(); amaster.gain.value = 0.16; amaster.connect(actx.destination);
+        actx = new AC(); amaster = actx.createGain(); amaster.gain.value = 0.32;
+        var comp = actx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 6; comp.attack.value = 0.002; comp.release.value = 0.12;
+        amaster.connect(comp); comp.connect(actx.destination);
+        adist = actx.createWaveShaper(); var cv = new Float32Array(256); for (var ci = 0; ci < 256; ci++) { var cx = ci / 128 - 1; cv[ci] = Math.tanh(cx * 7) * 0.8; }   // grit for gunfire and blasts
+        adist.curve = cv; adist.connect(amaster); abus = amaster;
         anoise = actx.createBuffer(1, actx.sampleRate >> 1, actx.sampleRate);
         var nd = anoise.getChannelData(0); for (var ni = 0; ni < nd.length; ni++) nd[ni] = Math.random() * 2 - 1;
       } catch (e) { actx = null; soundOn = false; return false; }
@@ -2463,38 +2467,44 @@
     if (actx.state !== 'running') { try { var rp = actx.resume(); if (rp && rp.catch) rp.catch(function () {}); } catch (e) {} return false; }
     return true;
   }
-  function tone(type, f0, f1, dur, vol, delay, pm) {
+  function tone(type, f0, f1, dur, vol, delay, pm) {          // a pitched body: thumps, boom, a held low note
     var t = actx.currentTime + (delay || 0), o = actx.createOscillator(), gn = actx.createGain();
     o.type = type; o.frequency.setValueAtTime(f0 * pm, t);
     if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1 * pm, t + dur);
     gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(gn); gn.connect(amaster); o.start(t); o.stop(t + dur + 0.03);
+    o.connect(gn); gn.connect(abus); o.start(t); o.stop(t + dur + 0.03);
   }
-  function hiss(f0, f1, dur, vol, q, pm) {                  // a burst of noise through a band that sweeps from f0 to f1
-    var t = actx.currentTime, s = actx.createBufferSource(), fl = actx.createBiquadFilter(), gn = actx.createGain();
-    s.buffer = anoise; fl.type = 'bandpass'; fl.Q.value = q; fl.frequency.setValueAtTime(f0 * pm, t); fl.frequency.exponentialRampToValueAtTime(f1 * pm, t + dur);
+  function noise(type, f0, f1, dur, vol, q, delay, pm) {      // a burst of noise through a filter that sweeps from f0 to f1: cloth, scuffs, cracks, rushes
+    var t = actx.currentTime + (delay || 0), s = actx.createBufferSource(), fl = actx.createBiquadFilter(), gn = actx.createGain();
+    s.buffer = anoise; fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f0 * pm, t); fl.frequency.exponentialRampToValueAtTime(f1 * pm, t + dur);
     gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    s.connect(fl); fl.connect(gn); gn.connect(amaster); s.start(t); s.stop(t + dur + 0.03);
+    s.connect(fl); fl.connect(gn); gn.connect(abus); s.start(t, Math.random() * 0.25); s.stop(t + dur + 0.03);
+  }
+  function clank(base, dur, vol, delay, pm) {                  // struck metal: partials that are not whole multiples, a quick ring
+    var r = [1, 2.76, 5.4, 8.93], i;
+    for (i = 0; i < r.length; i++) tone('sine', base * r[i], base * r[i] * 0.98, dur / (1 + i * 0.5), vol / (1 + i * 0.8), delay, pm);
+    noise('highpass', 5000, 3000, 0.02, vol * 0.6, 0.7, delay, pm);
   }
   function sfx(name, amt) {
     if (demo.on || embedded || !audioReady()) return;
     var pm = 0.92 + Math.random() * 0.17, a = amt === undefined ? 1 : amt;
+    abus = (name === 'shoot' || name === 'blast' || name === 'die') ? adist : amaster;   // gunfire and blasts go through the grit
     switch (name) {
-      case 'jump':   tone('square', 300, 560, 0.1, 0.5, 0, pm); break;
-      case 'wall':   tone('square', 360, 660, 0.1, 0.45, 0, pm); break;
-      case 'bounce': tone('triangle', 260, 900, 0.17, 0.7, 0, pm); break;
-      case 'dash':   hiss(2600, 600, 0.17, 1.1, 1.2, pm); tone('sawtooth', 220, 120, 0.1, 0.15, 0, pm); break;
-      case 'grab':   tone('square', 190, 150, 0.05, 0.35, 0, pm); break;
-      case 'land':   hiss(420, 120, 0.07 + a * 0.1, 0.35 + a * 0.7, 0.8, pm); if (a > 0.5) tone('sine', 120, 55, 0.14, 0.7 * a, 0, pm); break;
-      case 'spring': tone('triangle', 200, 1100, 0.24, 0.75, 0, pm); break;
-      case 'die':    tone('sawtooth', 420, 70, 0.36, 0.5, 0, pm); hiss(1800, 200, 0.3, 0.9, 0.9, pm); break;
-      case 'refill': tone('square', 660, 660, 0.06, 0.35, 0, pm); tone('square', 990, 990, 0.09, 0.35, 0.06, pm); break;
-      case 'gem':    tone('triangle', 880, 880, 0.08, 0.55, 0, pm); tone('triangle', 1320, 1320, 0.18, 0.55, 0.08, pm); break;
-      case 'door':   tone('square', 400, 400, 0.06, 0.4, 0, pm); tone('square', 600, 600, 0.06, 0.4, 0.06, pm); tone('square', 800, 800, 0.1, 0.4, 0.12, pm); break;
-      case 'exit':   tone('square', 523, 523, 0.08, 0.4, 0, pm); tone('square', 659, 659, 0.08, 0.4, 0.08, pm); tone('square', 784, 784, 0.08, 0.4, 0.16, pm); tone('square', 1046, 1046, 0.2, 0.4, 0.24, pm); break;
-      case 'shoot':  tone('square', 900, 220, 0.07, 0.3, 0, pm); break;
-      case 'hit':    hiss(2000, 300, 0.13, 0.9, 0.9, pm); tone('sawtooth', 200, 60, 0.15, 0.4, 0, pm); break;
-      case 'blast':  hiss(800, 60, 0.5, 1.5, 0.7, pm); tone('sine', 90, 35, 0.42, 0.9, 0, pm); break;
+      case 'jump':   noise('lowpass', 900, 300, 0.07, 0.5, 0.8, 0, pm); tone('sine', 110, 60, 0.09, 0.5, 0, pm); break;                       // a boot push off the ground
+      case 'wall':   noise('bandpass', 1600, 700, 0.09, 0.7, 1.1, 0, pm); tone('sine', 100, 55, 0.1, 0.5, 0, pm); break;                      // a scuff on concrete
+      case 'bounce': noise('bandpass', 1400, 400, 0.14, 0.8, 0.9, 0, pm); tone('sine', 90, 40, 0.16, 0.8, 0, pm); clank(420, 0.12, 0.12, 0.01, pm); break;
+      case 'dash':   noise('bandpass', 1300, 380, 0.16, 0.7, 0.8, 0, pm); clank(300, 0.06, 0.1, 0.02, pm); break;                              // a hard lunge, gear rattling
+      case 'grab':   tone('sine', 140, 70, 0.07, 0.6, 0, pm); noise('lowpass', 700, 250, 0.05, 0.4, 0.8, 0, pm); clank(520, 0.05, 0.06, 0, pm); break;   // a gloved grip
+      case 'land':   noise('lowpass', 500, 120, 0.07 + a * 0.12, 0.6 + a * 0.6, 0.7, 0, pm); tone('sine', 85, 40, 0.1 + a * 0.12, 0.7 + a * 0.5, 0, pm); if (a > 0.4) clank(260, 0.08, 0.1 * a, 0.02, pm); break;   // boots hitting, gear rattle on a hard one
+      case 'spring': clank(380, 0.18, 0.2, 0, pm); noise('highpass', 3500, 1200, 0.12, 0.35, 0.8, 0, pm); tone('sine', 80, 160, 0.12, 0.5, 0, pm); break;   // a steel plate under load, a piston hiss
+      case 'die':    noise('highpass', 3200, 700, 0.07, 1.1, 0.7, 0, pm); tone('sine', 150, 45, 0.14, 1, 0, pm); tone('sine', 70, 35, 0.4, 0.8, 0.12, pm); noise('lowpass', 450, 100, 0.25, 0.6, 0.7, 0.14, pm); break;   // a hit, then a body going down
+      case 'refill': clank(900, 0.05, 0.25, 0, pm); clank(650, 0.07, 0.3, 0.09, pm); break;                                                    // a magazine seated: click, clack
+      case 'gem':    clank(1250, 0.2, 0.3, 0, pm); clank(1700, 0.16, 0.2, 0.05, pm); break;                                                    // dog tags
+      case 'door':   clank(180, 0.18, 0.4, 0, pm); tone('sine', 90, 60, 0.12, 0.7, 0, pm); clank(300, 0.12, 0.3, 0.12, pm); break;               // a heavy bolt thrown
+      case 'exit':   noise('bandpass', 2200, 1600, 0.16, 0.5, 2, 0, pm); tone('sine', 1180, 1180, 0.06, 0.2, 0.16, pm); tone('sine', 1180, 1180, 0.06, 0.2, 0.26, pm); break;   // radio squelch and two beeps
+      case 'shoot':  noise('highpass', 3500, 900, 0.05, 1, 0.7, 0, pm); tone('sine', 170, 50, 0.1, 0.9, 0, pm); noise('lowpass', 900, 200, 0.12, 0.3, 0.7, 0.02, pm); break;   // crack, boom, tail
+      case 'hit':    noise('bandpass', 1800, 500, 0.09, 1, 0.9, 0, pm); tone('sine', 110, 45, 0.16, 1, 0, pm); break;                           // a round landing
+      case 'blast':  noise('lowpass', 900, 50, 0.9, 1.4, 0.7, 0, pm); tone('sine', 75, 28, 0.7, 1.2, 0, pm); noise('highpass', 3000, 600, 0.08, 1, 0.7, 0, pm); noise('lowpass', 300, 60, 0.6, 0.6, 0.7, 0.2, pm); break;
     }
   }
   function moveX(amount) {
